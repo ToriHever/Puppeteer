@@ -12,7 +12,7 @@ puppeteer.use(StealthPlugin());
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Папка для сохранения результатов
-const outputDir = 'Parser_domen/Результаты проверки доменов на чек хосте';
+const outputDir = 'Parser_domen/Results';
 
 // Создаем папку, если она не существует
 if (!fs.existsSync(outputDir)) {
