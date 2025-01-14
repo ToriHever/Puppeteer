@@ -1,19 +1,15 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
-import {
-    createObjectCsvWriter as createCsvWriter
-} from 'csv-writer';
-import {
-    sendTelegramMessage
-} from '../Notifications_Telegram.js'; // Импортируем функцию
+import { createObjectCsvWriter as createCsvWriter } from 'csv-writer';
+import { sendTelegramMessage } from '../Notifications_Telegram.js'; // Импортируем функцию
 import path from 'path';
 
 // Подключаем плагин "Stealth" для Puppeteer
 puppeteer.use(StealthPlugin());
 
 // Константа для базового пути
-const BASE_PATH = 'C:/Users/DDGWindows/Desktop/Puppeteer/Parser_request'; // Замените на нужный путь
+const BASE_PATH = 'C:/Users/DDGWindows/Desktop/Puppeteer/Parser_request'; 
 
 // Настройки
 const LOGIN = 'viparsing@yandex.ru'; // Замените на ваш логин
@@ -60,9 +56,8 @@ function generateRequestsWithOperators(queries) {
     return updatedQueries;
 }
 
-// Загружаем список запросов
+// Загружаем список запросов и добавляем операторы
 let queries = fs.readFileSync(REQUESTS_FILE, 'utf-8').split('\n').filter(Boolean);
-// Вызвываем функцию для генерации списка запросов
 const updatedQueries = generateRequestsWithOperators(queries);
 
 const csvWriter = createCsvWriter({
@@ -145,6 +140,7 @@ function delay(ms) {
             const cookies = JSON.parse(fs.readFileSync(COOKIES_PATH));
             await page.setCookie(...cookies);
             console.log('Куки загружены, авторизация выполнена');
+            await sendTelegramMessage('Куки загружены, авторизация выполнена');
         } else {
             console.log('Куки не найдены, выполняем авторизацию');
             await page.goto('https://passport.yandex.ru/auth');
@@ -163,6 +159,7 @@ function delay(ms) {
             const cookies = await page.cookies();
             fs.writeFileSync(COOKIES_PATH, JSON.stringify(cookies));
             console.log('Куки сохранены для повторного использования в:', COOKIES_PATH);
+            await sendTelegramMessage('Куки сохранены для повторного использования в:', COOKIES_PATH);
         }
 // Переходим на Wordstat
 await page.goto('https://wordstat.yandex.ru/');
@@ -200,9 +197,9 @@ for (const { type, query } of updatedQueries) {
 
     const frequency = await page.evaluate(() => {
         const element = document.querySelector('.wordstat__content-preview-text_last');
-        if (!element) return 'Нет данных';
+        if (!element) return '0';
         const text = element.textContent || '';
-        return text.split(':')[1]?.trim() || 'Нет данных';
+        return text.split(':')[1]?.trim() || '0';
     });
 
     // Сохраняем частоту в зависимости от типа
@@ -219,10 +216,10 @@ for (const { type, query } of updatedQueries) {
 for (const query in results) {
     const { original, withQuotes, withExclamation } = results[query];
     csvData.push({
-        query: query,
-        frequency: original || 'Нет данных',
-        frequencyWithQuotes: withQuotes || 'Нет данных',
-        frequencyWithExclamation: withExclamation || 'Нет данных',
+     query: query,
+        frequency: results[query].original || '0',
+        frequencyWithQuotes: results[query].withQuotes || '0',
+        frequencyWithExclamation: results[query].withExclamation || '0',
     });
 }
 
@@ -247,8 +244,9 @@ await sendTelegramMessage(`Парсинг запросов завершен. Р�
         console.error('Произошла ошибка:', error);
         if (results.length > 0) {
             await csvWriter.writeRecords(results);
-            console.log('Частичные результаты сохранены в:', OUTPUT_FILE);
+            await browser.close();
+            console.log('Браузер закрыт. Частичные результаты сохранены в:', OUTPUT_FILE);
         }
-        await sendTelegramMessage(`Произошла ошибка при парсинге ${error}. Частичные результаты сохранены в ${OUTPUT_FILE}`);
+        await sendTelegramMessage(`Произошла ошибка при парсинге ${error}. Частичные результаты сохранены в ${OUTPUT_FILE}. Браузер закрыт`);
     }
 })();
