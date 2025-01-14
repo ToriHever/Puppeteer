@@ -1,15 +1,21 @@
 {
   "name": "puppeteer",
   "version": "1.0.0",
+  "type": "module",
   "description": "Скрипты для автоматизации работы в браузере",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
+  "author": "Viktorya Miroshnikova",
   "license": "ISC",
   "dependencies": {
-    "puppeteer": "^24.0.0"
+    "puppeteer": " ^ 24.0 .0 ",
+    "axios": "^1.7.9",
+    "csv-writer": "^1.6.0",
+    "puppeteer": "^24.0.0",
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
 }
