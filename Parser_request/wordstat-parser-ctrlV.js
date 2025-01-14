@@ -113,9 +113,15 @@ function delay(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// Используем объект для хранения частоты запросов
+let results = {};
+
+// Массив для записи в CSV
+const csvData = [];
+
+
 // Основной процесс
 (async () => {
-
     try {
         // Проверяем наличие папки для результатов
         if (!fs.existsSync(OUTPUT_DIR)) {
@@ -145,108 +151,127 @@ function delay(ms) {
             console.log('Куки не найдены, выполняем авторизацию');
             await page.goto('https://passport.yandex.ru/auth');
             await page.waitForSelector('input[name="login"]');
-            await page.type('input[name="login"]', LOGIN, {
-                delay: 100
-            });
+            await page.type('input[name="login"]', LOGIN, { delay: 100 });
             await page.click('#passp\\:sign-in');
             await page.waitForSelector('input[name="password"]');
-            await page.type('input[name="password"]', PASSWORD, {
-                delay: 100
-            });
+            await page.type('input[name="password"]', PASSWORD, { delay: 100 });
             await page.click('#passp\\:sign-in');
             await page.waitForNavigation();
 
             const cookies = await page.cookies();
             fs.writeFileSync(COOKIES_PATH, JSON.stringify(cookies));
             console.log('Куки сохранены для повторного использования в:', COOKIES_PATH);
-            await sendTelegramMessage('Куки сохранены для повторного использования в:', COOKIES_PATH);
+            await sendTelegramMessage(`Куки сохранены для повторного использования в: ${COOKIES_PATH}`);
         }
-// Переходим на Wordstat
-await page.goto('https://wordstat.yandex.ru/');
-await page.waitForSelector('.textinput__control');
 
-// Используем объект для хранения частоты запросов
-const results = {};
+        // Переходим на Wordstat
+        await page.goto('https://wordstat.yandex.ru/');
+        await page.waitForSelector('.textinput__control');
 
-// Массив для записи в CSV
-const csvData = [];
+        // Рабочий цикл для обработки запросов
+        for (const { type, query } of updatedQueries) {
+            const baseQuery = query.replace(/["!]/g, '').trim();
 
-// Рабочий цикл для обработки запросов
-for (const { type, query } of updatedQueries) {
-    const baseQuery = query.replace(/["!]/g, '').trim(); // Убираем кавычки и восклицательные знаки для определения базового запроса
+            if (!results[baseQuery]) {
+                results[baseQuery] = {
+                    original: '',
+                    withQuotes: '',
+                    withExclamation: '',
+                };
+            }
 
-    // Инициализируем объект для запроса, если это первый запрос
-    if (!results[baseQuery]) {
-        results[baseQuery] = {
-            original: '',
-            withQuotes: '',
-            withExclamation: '',
-        };
-    }
+            await page.click('.textinput__control', { clickCount: 3 });
+            await page.keyboard.press('Backspace');
+            await delay(getRandomDelay(1000, 3000));
+            await copyToClipboard(page, query);
+            await pasteFromClipboard(page);
+            await delay(getRandomDelay(1000, 3000));
+            await page.keyboard.press('Enter');
+            await delay(getRandomDelay(2000, 5000));
 
-    await page.click('.textinput__control', {
-        clickCount: 3
-    });
-    await page.keyboard.press('Backspace');
-    await delay(getRandomDelay(1000, 3000));
-    await copyToClipboard(page, query);
-    await pasteFromClipboard(page);
-    await delay(getRandomDelay(1000, 3000));
-    await page.keyboard.press('Enter');
-    await delay(getRandomDelay(2000, 5000));
+            const frequency = await page.evaluate(() => {
+                const element = document.querySelector('.wordstat__content-preview-text_last');
+                if (!element) return '0';
+                const text = element.textContent || '';
+                return text.split(':')[1]?.trim() || '0';
+            });
 
-    const frequency = await page.evaluate(() => {
-        const element = document.querySelector('.wordstat__content-preview-text_last');
-        if (!element) return '0';
-        const text = element.textContent || '';
-        return text.split(':')[1]?.trim() || '0';
-    });
+            if (type === 'original') {
+                results[baseQuery].original = frequency;
+            } else if (type === 'withQuotes') {
+                results[baseQuery].withQuotes = frequency;
+            } else if (type === 'withExclamation') {
+                results[baseQuery].withExclamation = frequency;
+            }
+        }
 
-    // Сохраняем частоту в зависимости от типа
-    if (type === 'original') {
-        results[baseQuery].original = frequency;
-    } else if (type === 'withQuotes') {
-        results[baseQuery].withQuotes = frequency;
-    } else if (type === 'withExclamation') {
-        results[baseQuery].withExclamation = frequency;
-    }
-}
+        /// Подготовка данных для записи в CSV
+        for (const query in results) {
+            const { original, withQuotes, withExclamation } = results[query];
+            csvData.push({
+             query: query,
+                frequency: results[query].original || '0',
+                frequencyWithQuotes: results[query].withQuotes || '0',
+                frequencyWithExclamation: results[query].withExclamation || '0',
+            });
+        }
 
-// Подготовка данных для записи в CSV
-for (const query in results) {
-    const { original, withQuotes, withExclamation } = results[query];
-    csvData.push({
-     query: query,
-        frequency: results[query].original || '0',
-        frequencyWithQuotes: results[query].withQuotes || '0',
-        frequencyWithExclamation: results[query].withExclamation || '0',
-    });
-}
+        // Создаем CSV-записыватель с нужными заголовками
+        const csvWriter = createCsvWriter({
+            path: OUTPUT_FILE,
+            header: [
+                { id: 'query', title: 'Запрос' },
+                { id: 'frequency', title: 'Частота' },
+                { id: 'frequencyWithQuotes', title: 'Частота с кавычками' },
+                { id: 'frequencyWithExclamation', title: 'Частота с кавычками и восклицательными знаками' }
+            ]
+        });
 
-// Создаем CSV-записыватель с нужными заголовками
-const csvWriter = createCsvWriter({
-    path: OUTPUT_FILE,
-    header: [
-        { id: 'query', title: 'Запрос' },
-        { id: 'frequency', title: 'Частота' },
-        { id: 'frequencyWithQuotes', title: 'Частота с кавычками' },
-        { id: 'frequencyWithExclamation', title: 'Частота с кавычками и восклицательными знаками' }
-    ]
-});
-
-// Записываем результаты в CSV
-await csvWriter.writeRecords(csvData);
-console.log('Парсинг завершен. Результаты сохранены в:', OUTPUT_FILE);
-await sendTelegramMessage(`Парсинг запросов завершен. Результаты сохранены в ${OUTPUT_FILE}`);
+        // Записываем результаты в CSV
+        await csvWriter.writeRecords(csvData);
+        console.log('Парсинг завершен. /nРезультаты сохранены в:', OUTPUT_FILE);
+        await sendTelegramMessage(`Парсинг запросов завершен. /nРезультаты сохранены в ${OUTPUT_FILE}`);
 
         await browser.close();
+
     } catch (error) {
-        console.error('Произошла ошибка:', error);
-        if (results.length > 0) {
-            await csvWriter.writeRecords(results);
-            await browser.close();
-            console.log('Браузер закрыт. Частичные результаты сохранены в:', OUTPUT_FILE);
-        }
-        await sendTelegramMessage(`Произошла ошибка при парсинге ${error}. Частичные результаты сохранены в ${OUTPUT_FILE}. Браузер закрыт`);
+        console.error('Произошла ошибка:', error.message);
+
+        // Сохранение частичных данных
+        console.log('Сохраняем частичные результаты...');
+        if (Object.keys(results).length > 0) {
+    // Подготовка частичных данных для записи
+    const partialCsvData = [];
+    for (const query in results) {
+        const { original, withQuotes, withExclamation } = results[query];
+        partialCsvData.push({
+            query: query,
+            frequency: original || '0',
+            frequencyWithQuotes: withQuotes || '0',
+            frequencyWithExclamation: withExclamation || '0',
+        });
     }
-})();
+
+    // Создаем CSV-записыватель с той же структурой заголовков
+    const partialCsvWriter = createCsvWriter({
+        path: OUTPUT_FILE,
+        header: [
+            { id: 'query', title: 'Запрос' },
+            { id: 'frequency', title: 'Частота' },
+            { id: 'frequencyWithQuotes', title: 'Частота с кавычками' },
+            { id: 'frequencyWithExclamation', title: 'Частота с кавычками и восклицательными знаками' },
+        ],
+    });
+
+    // Записываем данные в CSV
+    await partialCsvWriter.writeRecords(partialCsvData);
+    console.log('Частичные результаты сохранены в:', OUTPUT_FILE);
+    await browser.close();
+} else {
+            console.log('Нет данных для сохранения.');
+        }
+
+        // Отправляем уведомление о проблеме
+        await sendTelegramMessage(`Ошибка: ${error.message}. /n*Частичные результаты сохранены.*`);
+    }
+})(); // Завершающая скобка
