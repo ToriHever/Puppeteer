@@ -204,7 +204,18 @@ const csvData = [];
                 results[baseQuery].withExclamation = frequency;
             }
 
-            console.log(`Обработан запрос: "${baseQuery}" | Оригинал: ${results[baseQuery].original} | Кавычки: ${results[baseQuery].withQuotes} | Восклицания: ${results[baseQuery].withExclamation}`);
+            if (
+        results[baseQuery].original &&
+        results[baseQuery].withQuotes &&
+        results[baseQuery].withExclamation
+    ){
+        console.log(
+            `Обработан запрос: "${baseQuery}" | ` +
+            `Оригинал: ${results[baseQuery].original} | ` +
+            `Кавычки: ${results[baseQuery].withQuotes} | ` +
+            `Восклицания: ${results[baseQuery].withExclamation}`
+        );
+    }
 
         }
 
@@ -269,6 +280,7 @@ const csvData = [];
     // Записываем данные в CSV
     await partialCsvWriter.writeRecords(partialCsvData);
     console.log('Частичные результаты сохранены в:', OUTPUT_FILE);
+    await sendTelegramMessage(`Ошибка: ${error.message}. /n*Частичные результаты сохранены.*`);
     await browser.close();
 } else {
             console.log('Нет данных для сохранения.');
