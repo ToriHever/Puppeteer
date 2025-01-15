@@ -34,7 +34,7 @@
 # Установка Git на пк
 https://selectel.ru/blog/tutorials/how-to-install-git-to-windows/ 
 После окончания установки. Открываем папку Puppeteer, в этйо открытой папке на пустом поле кликаем ПКМ имещм Open Git Bash here.
-Вводим в открывшеюся консоль: npm Parser_request/wordstat-parser-ctrlV.js
+Вводим в открывшеюся консоль: node Parser_request/wordstat-parser-ctrlV.js
 Введеный выше код это пусть к скрипту, который его запустит.
 
 // ВАЖНО не забудьте ручками открыть фал с запросами или списокм доменов и внести туда сови данные. 
