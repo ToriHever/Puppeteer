@@ -203,6 +203,9 @@ const csvData = [];
             } else if (type === 'withExclamation') {
                 results[baseQuery].withExclamation = frequency;
             }
+
+            console.log(`Обработан запрос: "${baseQuery}" | Оригинал: ${results[baseQuery].original} | Кавычки: ${results[baseQuery].withQuotes} | Восклицания: ${results[baseQuery].withExclamation}`);
+
         }
 
         /// Подготовка данных для записи в CSV
