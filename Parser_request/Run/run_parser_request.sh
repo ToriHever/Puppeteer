@@ -5,14 +5,14 @@ export LANG=en_US.UTF-8
 
 # Проверяем существование файла
 if [ -f "/c/Users/DDGWindows/Desktop/Puppeteer/Parser_request/requests.txt" ]; then
-    echo "Opening requests.txt..."
+    echo "Открытие requests.txt..."
     notepad.exe "/c/Users/DDGWindows/Desktop/Puppeteer/Parser_request/requests.txt"
-    echo "File closed. Running the script..."
+    echo "Файл закрыт. Скрипт запущен..."
 else
-    echo "File requests.txt not found at the specified path:"
+    echo "Файл Requests.txt не найден по указанному пути:"
     echo "/c/Users/DDGWindows/Desktop/Puppeteer/Parser_request/requests.txt"
-    echo "Please make sure the file exists."
-    read -p "Press any key to exit..."
+    echo "Пожалуйста, убедитесь, что файл существует."
+    read -p "Нажмите любую клавишу, чтобы выйти..."
     exit 1
 fi
 
@@ -22,6 +22,14 @@ cd "/c/Users/DDGWindows/Desktop/Puppeteer/Parser_request"
 # Запускаем Node.js скрипт
 node "wordstat-parser-ctrlV.js"
 
-# Ожидание перед закрытием
-echo "Script completed. Press any key to exit."
-read -n 1 -s
+
+EXIT_CODE=$?  # Получаем код завершения
+
+# Если произошла ошибка (код выхода не 0), ждем нажатия клавиши
+if [ "$EXIT_CODE" -ne 0 ]; then
+    echo "Произошла ошибка. Нажмите любую клавишу для выхода..."
+    read -n 1 -s
+fi
+
+# Выход из скрипта с тем же кодом
+exit $EXIT_CODE
