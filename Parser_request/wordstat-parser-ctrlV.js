@@ -247,6 +247,7 @@ const csvData = [];
         await sendTelegramMessage(`Парсинг запросов завершен. Результаты сохранены в ${OUTPUT_FILE}`);
 
         await browser.close();
+        process.exit();
 
     } catch (error) {
         console.error('Произошла ошибка:', error.message);
@@ -280,13 +281,13 @@ const csvData = [];
     // Записываем данные в CSV
     await partialCsvWriter.writeRecords(partialCsvData);
     console.log('Частичные результаты сохранены в:', OUTPUT_FILE);
-    await sendTelegramMessage(`Ошибка: ${error.message} Частичные результаты сохранены.`);
+    await sendTelegramMessage(`Ошибка: ${error.message} Частичные результаты сохранены. Консоль все еще открыта, посмотри логи.`);
     await browser.close();
 } else {
             console.log('Нет данных для сохранения.');
         }
 
         // Отправляем уведомление о проблеме
-        await sendTelegramMessage(`Ошибка: ${error.message} Частичные результаты сохранены.`);
+        await sendTelegramMessage(`Ошибка: ${error.message} Частичные результаты сохранены. Консоль все еще открыта, посмотри логи.`);
     }
 })(); // Завершающая скобка
