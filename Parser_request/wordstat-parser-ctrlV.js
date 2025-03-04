@@ -4,12 +4,16 @@ import fs from 'fs';
 import { createObjectCsvWriter as createCsvWriter } from 'csv-writer';
 import { sendTelegramMessage } from '../Notifications_Telegram.js'; // Импортируем функцию
 import path from 'path';
+import os from 'os';
 
 // Подключаем плагин "Stealth" для Puppeteer
 puppeteer.use(StealthPlugin());
 
+// Получаем имя пользователя
+const USERNAME = os.userInfo().username;
+
 // Константа для базового пути
-const BASE_PATH = 'C:/Users/DDGWindows/Desktop/Puppeteer/Parser_request'; 
+const BASE_PATH = path.join('C:/Users', USERNAME, 'Desktop/Puppeteer/Parser_request');
 
 // Настройки
 const LOGIN = 'viparsing@yandex.ru'; // Замените на ваш логин
