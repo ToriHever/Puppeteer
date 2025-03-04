@@ -133,6 +133,11 @@ const csvData = [];
         // Открываем браузер
         const browser = await puppeteer.launch({
             headless: false,
+            args: [
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
+            ],
             defaultViewport: {
                 width: BROWSER_WIDTH,
                 height: BROWSER_HEIGHT
@@ -170,41 +175,51 @@ const csvData = [];
 
         // Рабочий цикл для обработки запросов
         for (const { type, query } of updatedQueries) {
-            const baseQuery = query.replace(/["!]/g, '').trim();
+    const baseQuery = query.replace(/["!]/g, '').trim();
 
-            if (!results[baseQuery]) {
-                results[baseQuery] = {
-                    original: '',
-                    withQuotes: '',
-                    withExclamation: '',
-                };
-            }
+    if (!results[baseQuery]) {
+        results[baseQuery] = {
+            original: '',
+            withQuotes: '',
+            withExclamation: '',
+        };
+    }
 
-            await page.click('.textinput__control', { clickCount: 3 });
-            await page.keyboard.press('Backspace');
-            await delay(getRandomDelay(1000, 3000));
-            await copyToClipboard(page, query);
-            await pasteFromClipboard(page);
-            await delay(getRandomDelay(1000, 3000));
-            await page.keyboard.press('Enter');
-            await delay(getRandomDelay(2000, 5000));
+    await page.click('.textinput__control', { clickCount: 3 });
+    await page.keyboard.press('Backspace');
+    await delay(getRandomDelay(1000, 3000));
+    await copyToClipboard(page, query);
+    await pasteFromClipboard(page);
+    await delay(getRandomDelay(1000, 3000));
+    await page.keyboard.press('Enter');
 
-            const frequency = await page.evaluate(() => {
-                const element = document.querySelector('.wordstat__content-preview-text_last');
-                if (!element) return '0';
-                const text = element.textContent || '';
-                return text.split(':')[1]?.trim() || '0';
-            });
+    await page.waitForSelector('.wordstat__content-preview-text_last', {
+        timeout: 20000,
+        visible: true
+    }).catch(async (err) => {
+        console.log(`Элемент не появился для запроса "${query}": ${err.message}`);
+        await sendTelegramMessage(`Элемент не появился для запроса "${query}"`);
+    });
 
-            if (type === 'original') {
-                results[baseQuery].original = frequency;
-            } else if (type === 'withQuotes') {
-                results[baseQuery].withQuotes = frequency;
-            } else if (type === 'withExclamation') {
-                results[baseQuery].withExclamation = frequency;
-            }
+    // Добавляем задержку от 1 до 3 секунд после появления элемента
+    await delay(getRandomDelay(1000, 3000));
 
-            if (
+    const frequency = await page.evaluate(() => {
+        const element = document.querySelector('.wordstat__content-preview-text_last');
+        if (!element) return '0';
+        const text = element.textContent || '';
+        return text.split(':')[1]?.trim() || '0';
+    });
+
+    if (type === 'original') {
+        results[baseQuery].original = frequency;
+    } else if (type === 'withQuotes') {
+        results[baseQuery].withQuotes = frequency;
+    } else if (type === 'withExclamation') {
+        results[baseQuery].withExclamation = frequency;
+    }
+
+    if (
         results[baseQuery].original &&
         results[baseQuery].withQuotes &&
         results[baseQuery].withExclamation
@@ -216,8 +231,7 @@ const csvData = [];
             `Восклицания: ${results[baseQuery].withExclamation}`
         );
     }
-
-        }
+}
 
         /// Подготовка данных для записи в CSV
         for (const query in results) {
@@ -247,7 +261,7 @@ const csvData = [];
         await sendTelegramMessage(`Парсинг запросов завершен. Результаты сохранены в ${OUTPUT_FILE}`);
 
         await browser.close();
-        process.exit();
+        process.exit(0);
 
     } catch (error) {
         console.error('Произошла ошибка:', error.message);
