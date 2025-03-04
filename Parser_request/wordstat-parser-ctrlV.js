@@ -193,23 +193,33 @@ const csvData = [];
     await delay(getRandomDelay(1000, 3000));
     await page.keyboard.press('Enter');
 
-    await page.waitForSelector('.wordstat__content-preview-text_last', {
-        timeout: 20000,
+    // Ожидаем появления индикатора загрузки
+    await page.waitForSelector('.wordstat__content-preview.wordstat__content-preview_loading', {
         visible: true
-    }).catch(async (err) => {
-        console.log(`Элемент не появился для запроса "${query}": ${err.message}`);
-        await sendTelegramMessage(`Элемент не появился для запроса "${query}"`);
+    }).catch(() => {});
+
+    // Ждём, пока индикатор загрузки исчезнет (без таймаута)
+    await page.waitForFunction(
+        () => !document.querySelector('.wordstat__content-preview.wordstat__content-preview_loading')
+    ).catch(() => {});
+
+    // Проверяем наличие .wordstat__no-data
+    const noDataExists = await page.evaluate(() => {
+        return !!document.querySelector('.wordstat__no-data');
     });
 
-    // Добавляем задержку от 1 до 3 секунд после появления элемента
-    await delay(getRandomDelay(1000, 3000));
-
-    const frequency = await page.evaluate(() => {
-        const element = document.querySelector('.wordstat__content-preview-text_last');
-        if (!element) return '0';
-        const text = element.textContent || '';
-        return text.split(':')[1]?.trim() || '0';
-    });
+    let frequency;
+    if (noDataExists) {
+        frequency = '0'; // Если есть .wordstat__no-data, сразу записываем 0
+    } else {
+        // Иначе проверяем .wordstat__content-preview-text_last
+        frequency = await page.evaluate(() => {
+            const element = document.querySelector('.wordstat__content-preview-text_last');
+            if (!element) return '0';
+            const text = element.textContent || '';
+            return text.split(':')[1]?.trim() || '0';
+        });
+    }
 
     if (type === 'original') {
         results[baseQuery].original = frequency;
@@ -223,7 +233,7 @@ const csvData = [];
         results[baseQuery].original &&
         results[baseQuery].withQuotes &&
         results[baseQuery].withExclamation
-    ){
+    ) {
         console.log(
             `Обработан запрос: "${baseQuery}" | ` +
             `Оригинал: ${results[baseQuery].original} | ` +
