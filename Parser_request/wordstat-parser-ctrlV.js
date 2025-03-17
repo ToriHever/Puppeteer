@@ -25,6 +25,7 @@ const OUTPUT_FILE = path.join(OUTPUT_DIR, 'results.csv');
 const BROWSER_WIDTH = 1035;
 const BROWSER_HEIGHT = 520;
 
+
 // Функция для генерации запросов с операторами (кавычки и восклицательные знаки)
 function generateRequestsWithOperators(queries) {
     const updatedQueries = [];
@@ -137,11 +138,6 @@ const csvData = [];
         // Открываем браузер
         const browser = await puppeteer.launch({
             headless: false,
-            args: [
-                '--disable-background-timer-throttling',
-                '--disable-backgrounding-occluded-windows',
-                '--disable-renderer-backgrounding'
-            ],
             defaultViewport: {
                 width: BROWSER_WIDTH,
                 height: BROWSER_HEIGHT
@@ -179,65 +175,45 @@ const csvData = [];
 
         // Рабочий цикл для обработки запросов
         for (const { type, query } of updatedQueries) {
-    const baseQuery = query.replace(/["!]/g, '').trim();
+            const baseQuery = query.replace(/["!]/g, '').trim();
 
-    if (!results[baseQuery]) {
-        results[baseQuery] = {
-            original: '',
-            withQuotes: '',
-            withExclamation: '',
-        };
-    }
+            if (!results[baseQuery]) {
+                results[baseQuery] = {
+                    original: '',
+                    withQuotes: '',
+                    withExclamation: '',
+                };
+            }
 
-    await page.click('.textinput__control', { clickCount: 3 });
-    await page.keyboard.press('Backspace');
-    await delay(getRandomDelay(1000, 3000));
-    await copyToClipboard(page, query);
-    await pasteFromClipboard(page);
-    await delay(getRandomDelay(1000, 3000));
-    await page.keyboard.press('Enter');
+            await page.click('.textinput__control', { clickCount: 3 });
+            await page.keyboard.press('Backspace');
+            await delay(getRandomDelay(1000, 3000));
+            await copyToClipboard(page, query);
+            await pasteFromClipboard(page);
+            await delay(getRandomDelay(1000, 3000));
+            await page.keyboard.press('Enter');
+            await delay(getRandomDelay(2000, 5000));
 
-    // Ожидаем появления индикатора загрузки
-    await page.waitForSelector('.wordstat__content-preview.wordstat__content-preview_loading', {
-        visible: true
-    }).catch(() => {});
+            const frequency = await page.evaluate(() => {
+                const element = document.querySelector('.wordstat__content-preview-text_last');
+                if (!element) return '0';
+                const text = element.textContent || '';
+                return text.split(':')[1]?.trim() || '0';
+            });
 
-    // Ждём, пока индикатор загрузки исчезнет (без таймаута)
-    await page.waitForFunction(
-        () => !document.querySelector('.wordstat__content-preview.wordstat__content-preview_loading')
-    ).catch(() => {});
+            if (type === 'original') {
+                results[baseQuery].original = frequency;
+            } else if (type === 'withQuotes') {
+                results[baseQuery].withQuotes = frequency;
+            } else if (type === 'withExclamation') {
+                results[baseQuery].withExclamation = frequency;
+            }
 
-    // Проверяем наличие .wordstat__no-data
-    const noDataExists = await page.evaluate(() => {
-        return !!document.querySelector('.wordstat__no-data');
-    });
-
-    let frequency;
-    if (noDataExists) {
-        frequency = '0'; // Если есть .wordstat__no-data, сразу записываем 0
-    } else {
-        // Иначе проверяем .wordstat__content-preview-text_last
-        frequency = await page.evaluate(() => {
-            const element = document.querySelector('.wordstat__content-preview-text_last');
-            if (!element) return '0';
-            const text = element.textContent || '';
-            return text.split(':')[1]?.trim() || '0';
-        });
-    }
-
-    if (type === 'original') {
-        results[baseQuery].original = frequency;
-    } else if (type === 'withQuotes') {
-        results[baseQuery].withQuotes = frequency;
-    } else if (type === 'withExclamation') {
-        results[baseQuery].withExclamation = frequency;
-    }
-
-    if (
+            if (
         results[baseQuery].original &&
         results[baseQuery].withQuotes &&
         results[baseQuery].withExclamation
-    ) {
+    ){
         console.log(
             `Обработан запрос: "${baseQuery}" | ` +
             `Оригинал: ${results[baseQuery].original} | ` +
@@ -245,7 +221,8 @@ const csvData = [];
             `Восклицания: ${results[baseQuery].withExclamation}`
         );
     }
-}
+
+        }
 
         /// Подготовка данных для записи в CSV
         for (const query in results) {
@@ -275,7 +252,7 @@ const csvData = [];
         await sendTelegramMessage(`Парсинг запросов завершен. Результаты сохранены в ${OUTPUT_FILE}`);
 
         await browser.close();
-        process.exit(0);
+        process.exit();
 
     } catch (error) {
         console.error('Произошла ошибка:', error.message);
