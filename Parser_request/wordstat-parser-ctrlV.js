@@ -25,7 +25,6 @@ const OUTPUT_FILE = path.join(OUTPUT_DIR, 'results.csv');
 const BROWSER_WIDTH = 1035;
 const BROWSER_HEIGHT = 520;
 
-
 // Функция для генерации запросов с операторами (кавычки и восклицательные знаки)
 function generateRequestsWithOperators(queries) {
     const updatedQueries = [];
@@ -64,24 +63,6 @@ function generateRequestsWithOperators(queries) {
 // Загружаем список запросов и добавляем операторы
 let queries = fs.readFileSync(REQUESTS_FILE, 'utf-8').split('\n').filter(Boolean);
 const updatedQueries = generateRequestsWithOperators(queries);
-
-const csvWriter = createCsvWriter({
-    path: OUTPUT_FILE,
-    header: [
-        {
-            id: 'query',
-            title: 'Запрос'
-        },
-        {
-            id: 'type',
-            title: 'Тип'
-        },
-        {
-            id: 'frequency',
-            title: 'Частота'
-        }
-    ]
-});
 
 // Функция для копирования текста в буфер обмена через Puppeteer
 async function copyToClipboard(page, text) {
@@ -124,19 +105,16 @@ let results = {};
 // Массив для записи в CSV
 const csvData = [];
 
-
-// Основной процесс
 (async () => {
+    let browser;
     try {
         // Проверяем наличие папки для результатов
         if (!fs.existsSync(OUTPUT_DIR)) {
-            fs.mkdirSync(OUTPUT_DIR, {
-                recursive: true
-            });
+            fs.mkdirSync(OUTPUT_DIR, { recursive: true });
         }
 
         // Открываем браузер
-        const browser = await puppeteer.launch({
+        browser = await puppeteer.launch({
             headless: false,
             defaultViewport: {
                 width: BROWSER_WIDTH,
@@ -185,53 +163,73 @@ const csvData = [];
                 };
             }
 
-            await page.click('.textinput__control', { clickCount: 3 });
-            await page.keyboard.press('Backspace');
-            await delay(getRandomDelay(1000, 3000));
-            await copyToClipboard(page, query);
-            await pasteFromClipboard(page);
-            await delay(getRandomDelay(1000, 3000));
-            await page.keyboard.press('Enter');
-            await delay(getRandomDelay(2000, 5000));
+            let processed = false;
+            while (!processed) {
+                try {
+                    await page.click('.textinput__control', { clickCount: 3 });
+                    await page.keyboard.press('Backspace');
+                    await delay(getRandomDelay(1000, 3000));
+                    await copyToClipboard(page, query);
+                    await pasteFromClipboard(page);
+                    await delay(getRandomDelay(1000, 3000));
+                    await page.keyboard.press('Enter');
+                    await delay(getRandomDelay(2000, 5000));
 
-            const frequency = await page.evaluate(() => {
-                const element = document.querySelector('.wordstat__content-preview-text_last');
-                if (!element) return '0';
-                const text = element.textContent || '';
-                return text.split(':')[1]?.trim() || '0';
-            });
+                    const frequency = await page.evaluate(() => {
+                        const element = document.querySelector('.wordstat__content-preview-text_last');
+                        if (!element) return '0';
+                        const text = element.textContent || '';
+                        return text.split(':')[1]?.trim() || '0';
+                    });
 
-            if (type === 'original') {
-                results[baseQuery].original = frequency;
-            } else if (type === 'withQuotes') {
-                results[baseQuery].withQuotes = frequency;
-            } else if (type === 'withExclamation') {
-                results[baseQuery].withExclamation = frequency;
+                    if (type === 'original') {
+                        results[baseQuery].original = frequency;
+                    } else if (type === 'withQuotes') {
+                        results[baseQuery].withQuotes = frequency;
+                    } else if (type === 'withExclamation') {
+                        results[baseQuery].withExclamation = frequency;
+                    }
+
+                    if (
+                        results[baseQuery].original &&
+                        results[baseQuery].withQuotes &&
+                        results[baseQuery].withExclamation
+                    ) {
+                        console.log(
+                            `Обработан запрос: "${baseQuery}" | ` +
+                            `Оригинал: ${results[baseQuery].original} | ` +
+                            `Кавычки: ${results[baseQuery].withQuotes} | ` +
+                            `Восклицания: ${results[baseQuery].withExclamation}`
+                        );
+                    }
+                    processed = true; // Запрос успешно обработан – выходим из цикла попыток
+                } catch (error) {
+                    // Если ошибка связана с отсутствием селектора ".textinput__control", ожидаем ввод пользователя и повторяем попытку
+                    if (error.message.includes('.textinput__control')) {
+                        console.log('Обнаружена ошибка с селектором ".textinput__control". Нажмите любую клавишу, чтобы повторить попытку...');
+                        await new Promise(resolve => {
+                            process.stdin.resume();
+                            process.stdin.once('data', () => {
+                                process.stdin.pause();
+                                resolve();
+                            });
+                        });
+                    } else {
+                        // Для других ошибок прерываем выполнение
+                        throw error;
+                    }
+                }
             }
-
-            if (
-        results[baseQuery].original &&
-        results[baseQuery].withQuotes &&
-        results[baseQuery].withExclamation
-    ){
-        console.log(
-            `Обработан запрос: "${baseQuery}" | ` +
-            `Оригинал: ${results[baseQuery].original} | ` +
-            `Кавычки: ${results[baseQuery].withQuotes} | ` +
-            `Восклицания: ${results[baseQuery].withExclamation}`
-        );
-    }
-
         }
 
-        /// Подготовка данных для записи в CSV
+        // Подготовка данных для записи в CSV
         for (const query in results) {
             const { original, withQuotes, withExclamation } = results[query];
             csvData.push({
-             query: query,
-                frequency: results[query].original || '0',
-                frequencyWithQuotes: results[query].withQuotes || '0',
-                frequencyWithExclamation: results[query].withExclamation || '0',
+                query: query,
+                frequency: original || '0',
+                frequencyWithQuotes: withQuotes || '0',
+                frequencyWithExclamation: withExclamation || '0',
             });
         }
 
@@ -248,51 +246,46 @@ const csvData = [];
 
         // Записываем результаты в CSV
         await csvWriter.writeRecords(csvData);
-        console.log('Парсинг завершен. /nРезультаты сохранены в:', OUTPUT_FILE);
+        console.log('Парсинг завершен. Результаты сохранены в:', OUTPUT_FILE);
         await sendTelegramMessage(`Парсинг запросов завершен. Результаты сохранены в ${OUTPUT_FILE}`);
 
         await browser.close();
-        process.exit();
-
+        // Завершаем скрипт без прямого вызова process.exit(), чтобы не прерывать работу, если что-то ещё нужно
     } catch (error) {
         console.error('Произошла ошибка:', error.message);
 
         // Сохранение частичных данных
         console.log('Сохраняем частичные результаты...');
         if (Object.keys(results).length > 0) {
-    // Подготовка частичных данных для записи
-    const partialCsvData = [];
-    for (const query in results) {
-        const { original, withQuotes, withExclamation } = results[query];
-        partialCsvData.push({
-            query: query,
-            frequency: original || '0',
-            frequencyWithQuotes: withQuotes || '0',
-            frequencyWithExclamation: withExclamation || '0',
-        });
-    }
+            const partialCsvData = [];
+            for (const query in results) {
+                const { original, withQuotes, withExclamation } = results[query];
+                partialCsvData.push({
+                    query: query,
+                    frequency: original || '0',
+                    frequencyWithQuotes: withQuotes || '0',
+                    frequencyWithExclamation: withExclamation || '0',
+                });
+            }
 
-    // Создаем CSV-записыватель с той же структурой заголовков
-    const partialCsvWriter = createCsvWriter({
-        path: OUTPUT_FILE,
-        header: [
-            { id: 'query', title: 'Запрос' },
-            { id: 'frequency', title: 'Частота' },
-            { id: 'frequencyWithQuotes', title: 'Частота с кавычками' },
-            { id: 'frequencyWithExclamation', title: 'Частота с кавычками и восклицательными знаками' },
-        ],
-    });
+            const partialCsvWriter = createCsvWriter({
+                path: OUTPUT_FILE,
+                header: [
+                    { id: 'query', title: 'Запрос' },
+                    { id: 'frequency', title: 'Частота' },
+                    { id: 'frequencyWithQuotes', title: 'Частота с кавычками' },
+                    { id: 'frequencyWithExclamation', title: 'Частота с кавычками и восклицательными знаками' },
+                ],
+            });
 
-    // Записываем данные в CSV
-    await partialCsvWriter.writeRecords(partialCsvData);
-    console.log('Частичные результаты сохранены в:', OUTPUT_FILE);
-    await sendTelegramMessage(`Ошибка: ${error.message} Частичные результаты сохранены. Консоль все еще открыта, посмотри логи.`);
-    await browser.close();
-} else {
+            await partialCsvWriter.writeRecords(partialCsvData);
+            console.log('Частичные результаты сохранены в:', OUTPUT_FILE);
+            await sendTelegramMessage(`Ошибка: ${error.message} Частичные результаты сохранены. Консоль все еще открыта, посмотри логи.`);
+            if (browser) await browser.close();
+        } else {
             console.log('Нет данных для сохранения.');
         }
 
-        // Отправляем уведомление о проблеме
         await sendTelegramMessage(`Ошибка: ${error.message} Частичные результаты сохранены. Консоль все еще открыта, посмотри логи.`);
     }
-})(); // Завершающая скобка
+})();
