@@ -1,66 +1,61 @@
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import fs from 'fs';
-import readline from 'readline';
 import { createObjectCsvWriter as createCsvWriter } from 'csv-writer';
-import { sendTelegramMessage } from '../Notifications_Telegram.js'; // Импортируем функцию
+import { sendTelegramMessage } from '../Notifications_Telegram.js';
+import path from 'path';
 
-// Подключаем плагин "Stealth" для Puppeteer
 puppeteer.use(StealthPlugin());
 
-// Функция для задержки
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Папка для сохранения результатов
 const outputDir = 'Parser_domen/Results';
-
-// Создаем папку, если она не существует
 if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
     console.log(`Папка "${outputDir}" создана.`);
 }
 
-// Функция для проверки и создания уникального имени файла
 const getUniqueFilename = (baseName) => {
     let counter = 1;
     let filename = `${outputDir}/${baseName}.csv`;
-
     while (fs.existsSync(filename)) {
         filename = `${outputDir}/${baseName}_${counter}.csv`;
         counter++;
     }
-
     return filename;
 };
 
-// Чтение списка доменов из файла domens.txt
-const domains = fs.readFileSync('Parser_domen/domens.txt', 'utf-8')
+const scriptDir = path.resolve(path.dirname(new URL(import.meta.url).pathname).replace(/^\/?([A-Za-z]):/, '$1:'));
+const domensPath = path.resolve(scriptDir, 'domens.txt');
+const domains = fs.readFileSync(domensPath, 'utf-8')
     .split('\n')
-    .map((domain) => domain.trim())
-    .filter((domain) => domain.length > 0);
+    .map((d) => d.trim())
+    .filter(Boolean);
 
 if (!domains.length) {
-    console.error('Ошибка: Файл domens.txt пуст или не содержит доменов.');
-    await sendTelegramMessage(`Ошибка: Файл domens.txt пуст или не содержит доменов. Скрипт завершил работу.`);
-    process.exit(1); // Завершаем скрипт
+    console.error('Файл domens.txt пуст');
+    await sendTelegramMessage('Ошибка: Файл domens.txt пуст или не содержит доменов.');
+    process.exit(1);
 }
 
-// Функция для сохранения результатов в CSV
 const saveToCsv = async (results, batchNumber) => {
-    const uniqueFilename = getUniqueFilename(`Партия_${batchNumber}`);
-
+    const filename = getUniqueFilename(`Партия_${batchNumber}`);
     const csvWriter = createCsvWriter({
-        path: uniqueFilename,
+        path: filename,
         header: [
             { id: 'domain', title: 'Домен' },
             { id: 'provider', title: 'Провайдер' },
             { id: 'organization', title: 'Организация' },
         ],
     });
-
     await csvWriter.writeRecords(results);
-    console.log(`Результаты сохранены в файл: ${uniqueFilename}`);
-    await sendTelegramMessage(`Результаты сохранены: ${uniqueFilename}`);
+    console.log(`Результаты сохранены в: ${filename}`);
+    await sendTelegramMessage(`Результаты сохранены: ${filename}`);
+};
+
+const appendToLog = (text) => {
+    const logText = `[${new Date().toLocaleString()}] ${text}\n`;
+    fs.appendFileSync(`${outputDir}/log.txt`, logText);
 };
 
 (async () => {
@@ -72,14 +67,11 @@ const saveToCsv = async (results, batchNumber) => {
     const results = [];
     let batchNumber = 1;
     let domainCounter = 0;
-    let lastProcessedDomain = null;
 
     for (const domain of domains) {
         domainCounter++;
-        lastProcessedDomain = domain;
         const startTime = new Date();
-        console.log(`Проверяем домен #${domainCounter}: ${domain}`);
-        console.log(`Начало проверки: ${startTime.toLocaleString()}`);
+        console.log(`\n#${domainCounter}: ${domain} (${startTime.toLocaleTimeString()})`);
 
         try {
             await page.goto(checkHostURL, { waitUntil: 'domcontentloaded', timeout: 30000 });
@@ -87,107 +79,72 @@ const saveToCsv = async (results, batchNumber) => {
             const inputSelector = 'input[name="host"]';
             await page.waitForSelector(inputSelector);
 
-            // Очистка поля ввода
-            await page.focus(inputSelector);
-            await page.keyboard.down('Control');
-            await page.keyboard.press('A');
-            await page.keyboard.up('Control');
+            // Очистка поля и ввод
+            await page.click(inputSelector, { clickCount: 3 });
             await page.keyboard.press('Backspace');
-
-            // Ввод домена
             await page.type(inputSelector, domain);
             await page.keyboard.press('Enter');
 
-            // Проверка наличия таблицы или ошибки
-            try {
-                const errorSelector = '.error';
-                const tableSelector = 'div.flex-auto.w-full table tbody tr';
+            // Ожидаем либо ошибку, либо таблицу
+            const tableSelector = 'div.flex-auto.w-full table tbody tr';
+            const errorSelector = '.error';
+            await page.waitForSelector(`${errorSelector}, ${tableSelector}`, { timeout: 30000 });
 
-                // Ждем появления таблицы или ошибки (что наступит первым)
-                await page.waitForSelector(`${errorSelector}, ${tableSelector}`, {
-                    timeout: 30000
-                });
-
-                const hasErrorClass = await page.evaluate(() => {
-                    return !!document.querySelector('.error');
-                });
-
-                if (hasErrorClass) {
-                    const errorMsg = `Ошибка: Для домена "${domain}" обнаружен элемент с классом "error". Пропускаем.`;
-                    console.error(errorMsg);
-                    continue;
-                }
-
-                // Если таблица не найдена, то ошибка
-                const hasTable = await page.evaluate(() => {
-                    return !!document.querySelector('div.flex-auto.w-full table tbody tr');
-                });
-
-                if (!hasTable) {
-                    const errorMsg = `Ошибка: Таблица для домена "${domain}" не найдена.`;
-                    console.error(errorMsg);
-                    continue;
-                }
-            } catch (error) {
-                const errorMsg = `Ошибка при проверке наличия таблицы или ошибки для домена "${domain}": ${error.message}`;
-                console.error(errorMsg);
+            const hasError = await page.$(errorSelector);
+            if (hasError) {
+                const msg = `Ошибка у домена "${domain}": Найден элемент ".error". Пропущен.`;
+                console.warn(msg);
+                appendToLog(msg);
                 continue;
             }
 
-            // Извлечение данных
-            const providerAndOrganization = await page.evaluate(() => {
+            const data = await page.evaluate(() => {
                 const rows = document.querySelectorAll('div.flex-auto.w-full table tbody tr');
-                let provider = 'Не найдено';
-                let organization = 'Не найдено';
+                if (rows.length < 5) return null;
 
-                if (rows[3]) {
-                    provider = rows[3].querySelector('td:last-child')?.innerText || 'Не найдено';
-                }
-                if (rows[4]) {
-                    organization = rows[4].querySelector('td:last-child')?.innerText || 'Не найдено';
-                }
+                const getText = (index) =>
+                    rows[index]?.querySelector('td:last-child')?.innerText?.trim() || 'Не найдено';
 
-                return { provider, organization };
+                return {
+                    provider: getText(3),
+                    organization: getText(4),
+                };
             });
 
-            console.log(`Провайдер: ${providerAndOrganization.provider}`);
-            console.log(`Организация: ${providerAndOrganization.organization}`);
+            if (!data) {
+                const msg = `Ошибка у домена "${domain}": недостаточно строк в таблице.`;
+                console.warn(msg);
+                appendToLog(msg);
+                continue;
+            }
 
-            results.push({
-                domain,
-                provider: providerAndOrganization.provider,
-                organization: providerAndOrganization.organization,
-            });
+            console.log(`Провайдер: ${data.provider}`);
+            console.log(`Организация: ${data.organization}`);
 
-        } catch (error) {
-            const errorMsg = `Неизвестная ошибка при обработке домена ${domain}: ${error?.message || 'Без сообщения об ошибке'}`;
-            console.error(errorMsg);
-            await sendTelegramMessage(errorMsg);
+            results.push({ domain, ...data });
 
-            // Сохраняем результаты перед завершением работы
+        } catch (err) {
+            const msg = `Ошибка при обработке домена "${domain}": ${err.message}`;
+            console.error(msg);
+            appendToLog(msg);
+            await sendTelegramMessage(msg);
             await saveToCsv(results, batchNumber);
-            console.log(`Скрипт завершён из-за неизвестной ошибки: ${error.message}. Все результаты сохранены.`);
-            await sendTelegramMessage(`Скрипт завершён из-за неизвестной ошибки: ${error.message}. Все результаты сохранены. Последний обработанный домен ${lastProcessedDomain}`);
-
             await browser.close();
-            process.exit(1); // Завершаем скрипт
+            process.exit(1);
         }
 
-        // Сохраняем результаты каждые 1000 доменов
         if (domainCounter % 1000 === 0) {
             await saveToCsv(results, batchNumber);
+            results.length = 0;
             batchNumber++;
-            results.length = 0; // Очищаем массив для следующего набора
         }
     }
 
-    // Сохраняем оставшиеся результаты, если есть
     if (results.length > 0) {
         await saveToCsv(results, batchNumber);
     }
 
     await browser.close();
-    console.log('Скрипт завершён. Все результаты сохранены.');
+    console.log('Готово! Все результаты сохранены.');
     await sendTelegramMessage('Скрипт завершён. Все результаты сохранены.');
 })();
-
