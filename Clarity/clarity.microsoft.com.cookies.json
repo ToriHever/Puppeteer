@@ -1,0 +1,166 @@
+[
+  {
+    "name": "MC1",
+    "value": "GUID=1c1ae47bcc914cf3b840253eccfb539e&HASH=1c1a&LV=202407&V=4&LU=1720188274753",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1751724275.616406,
+    "httpOnly": false,
+    "secure": true
+  },
+  {
+    "name": "_tt_enable_cookie",
+    "value": "1",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1753886650,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "_ttp",
+    "value": "zDm2uhe__BgBOtuRMl59li9FwfM",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1753886650,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "idp",
+    "value": "google",
+    "domain": "clarity.microsoft.com",
+    "path": "/",
+    "expires": 1778922340.084883,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "_cs_c",
+    "value": "0",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1755197025,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "_cs_id",
+    "value": "42009582-d338-a2c1-a97a-3e88d2f09bb9.1721033025.1.1721033025.1721033025.1613561419.1755197025914.1",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1755197025,
+    "httpOnly": false,
+    "secure": false,
+    "sameSite": "Lax"
+  },
+  {
+    "name": "MUID",
+    "value": "16CD9C62D774664F09DC88D1D61F670A",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1781432156.797842,
+    "httpOnly": false,
+    "secure": true
+  },
+  {
+    "name": "MUIDB",
+    "value": "16CD9C62D774664F09DC88D1D61F670A",
+    "domain": "clarity.microsoft.com",
+    "path": "/",
+    "expires": 1755341159.527954,
+    "httpOnly": true,
+    "secure": true
+  },
+  {
+    "name": "_uetvid",
+    "value": "09b542c03add11ef833e91f9e02d4fae",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1759762237,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "AMCV_EA76ADE95776D2EC7F000101%40AdobeOrg",
+    "value": "1585540135%7CMCIDTS%7C20005%7CMCMID%7C61159355461973854632311741590832490283%7CMCAAMLH-1728992471%7C4%7CMCAAMB-1728992471%7CRKhpRz8krg2tLO6pguXWp5olkAcUniQYPHaMWWgdJ3xzPWQmdj0y%7CMCCIDH%7C1105294308%7CMCOPTOUT-1728394871s%7CNONE%7CMCAID%7CNONE%7CvVersion%7C4.4.0",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1762577671,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "_gcl_au",
+    "value": "1.1.1336306395.1745235526",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1753011526,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "aadprofile",
+    "value": "s%3AUQoSrApfgJ0r9aVXyPJKiMeffonWhu7w.38dPZ3eOv6Si%2FBkDq7zV0SlaqkQ6s1X1tvWLTEn%2FAuE",
+    "domain": "clarity.microsoft.com",
+    "path": "/",
+    "expires": 1749554760.143751,
+    "httpOnly": true,
+    "secure": true
+  },
+  {
+    "name": "MSCC",
+    "value": "NR",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1747748889,
+    "httpOnly": false,
+    "secure": true
+  },
+  {
+    "name": "_csrf",
+    "value": "JJsfoxiHHMbwW_CpP6KQAdnU",
+    "domain": "clarity.microsoft.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "_clck",
+    "value": "sghm8c%7C2%7Cfw2%7C1%7C1647",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1779263863,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "at_check",
+    "value": "true",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": -1,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "mbox",
+    "value": "PC#0c70c603e6b941cbb68a22a5a8a430c4.34_0#1781916740|session#551c51544a7b4fb8a9f03fefca463be2#1747738600",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1781916740,
+    "httpOnly": false,
+    "secure": false
+  },
+  {
+    "name": "_clsk",
+    "value": "197024l%7C1747739973460%7C37%7C1%7Ci.clarity.ms%2Fcollect",
+    "domain": ".microsoft.com",
+    "path": "/",
+    "expires": 1747826373,
+    "httpOnly": false,
+    "secure": false
+  }
+]

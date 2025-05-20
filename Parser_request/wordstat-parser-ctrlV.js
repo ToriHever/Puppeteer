@@ -19,7 +19,7 @@ const TARGET_URL = 'https://wordstat.yandex.ru/';
 const COOKIES_PATH = path.join(BASE_PATH, 'cookiesWordstat.json');
 const REQUESTS_FILE = path.join(BASE_PATH, 'requests.txt');
 const OUTPUT_DIR = path.join(BASE_PATH, 'Results');
-const OUTPUT_FILE = path.join(OUTPUT_DIR, 'results.csv');
+const OUTPUT_FILE = path.join(OUTPUT_DIR, 'WordStat.csv');
 const VIEWPORT = { width: 1035, height: 520 };
 
 // Утилиты
@@ -86,27 +86,8 @@ function promptCommand(rl) { return new Promise(res => rl.question('> ', ans => 
       await page.reload({ waitUntil: 'networkidle2' });
     }
 
-        // Внедряем UI-кнопки для команд
-    await page.exposeFunction('uiCommand', cmd => {
-      // вносим команду в readline для дальнейшей обработки
-      rl.write(cmd + '
-');
-    });
-    await page.evaluate(() => {
-      const panel = document.createElement('div');
-      panel.style = 'position:fixed;top:0;left:0;z-index:9999;background:#eee;padding:8px;border:1px solid #333;font-family:sans-serif;';
-      ['login','save-cookie','clear','run'].forEach(cmd => {
-        const btn = document.createElement('button');
-        btn.innerText = cmd;
-        btn.style = 'margin-right:5px;';
-        btn.onclick = () => window.uiCommand(cmd);
-        panel.appendChild(btn);
-      });
-      document.body.appendChild(panel);
-    });
-
     // Команды управления
-    console.log('Команды: login, save-cookie, clear, run');
+    console.log('Команды: login, save-cookie, run');
     while (true) {
       const cmd = await promptCommand(rl);
       if (cmd === 'login') {
@@ -124,13 +105,6 @@ function promptCommand(rl) { return new Promise(res => rl.question('> ', ans => 
       } else if (cmd === 'save-cookie') {
         fs.writeFileSync(COOKIES_PATH, JSON.stringify(await page.cookies()));
         console.log('Куки сохранены вручную.');
-      } else if (cmd === 'clear') {
-        if (fs.existsSync(OUTPUT_FILE)) {
-          fs.writeFileSync(OUTPUT_FILE, '');
-          console.log('Файл результатов очищен.');
-        } else {
-          console.log('Файл результатов не найден.');
-        }
       } else if (cmd === 'run') {
         if (page.url().startsWith(TARGET_URL)) {
           console.log('Запуск парсинга...'); break;
