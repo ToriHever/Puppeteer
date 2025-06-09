@@ -112,7 +112,7 @@ function promptCommand(rl) { return new Promise(res => rl.question('> ', ans => 
       autoRun = true;
     } else {
       console.log('Поле ввода не найдено — скрипт ожидает ручного запуска');
-      await sendTelegramMessage('Предупреждение — Скрипт не начат');
+      await sendTelegramMessage('⚠️ Предупреждение — Скрипт не начат');
     }
 
     // Команды управления
