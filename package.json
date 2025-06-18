@@ -1,6 +1,6 @@
 {
-  "name": "puppeteer",
-  "version": "1.0.0",
+  "name": "puppeteer-VI",
+  "version": "2.0.0",
   "type": "module",
   "description": "Скрипты для автоматизации работы в браузере",
   "main": "index.js",
@@ -11,10 +11,9 @@
   "author": "Viktorya Miroshnikova",
   "license": "ISC",
   "dependencies": {
-    "puppeteer": " ^ 24.0 .0 ",
     "axios": "^1.7.9",
     "csv-writer": "^1.6.0",
-    "puppeteer": "^24.0.0",
+    "puppeteer": "^24.10.1",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2"
   }
