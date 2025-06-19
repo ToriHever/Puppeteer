@@ -4,19 +4,40 @@ import { executablePath } from 'puppeteer';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 
 puppeteer.use(StealthPlugin());
 
-const requestsPath = path.resolve('request.txt');
-const queries = fs.readFileSync(requestsPath, 'utf-8')
-  .split('\n')
-  .map(q => q.trim())
-  .filter(Boolean);
+const execFileAsync = promisify(execFile);
 
-if (!queries.length) {
-  console.log('❌ Нет запросов в request.txt');
+// Путь к файлу запросов
+const requestsPath = path.resolve('request.txt');
+
+// === Шаг 1. Открыть файл в Блокноте и ждать его закрытия ===
+console.log('📝 Открываем request.txt для редактирования...');
+await execFileAsync('notepad.exe', [requestsPath]);
+console.log('✅ Файл отредактирован и закрыт');
+
+// === Шаг 2. Чтение запроса ===
+let queries = [];
+try {
+  const fileContent = fs.readFileSync(requestsPath, 'utf-8');
+  queries = fileContent
+    .split('\n')
+    .map(q => q.trim())
+    .filter(Boolean);
+
+  if (!queries.length) {
+    console.log('❌ Файл request.txt пуст');
+    process.exit(1);
+  }
+} catch (err) {
+  console.error('❌ Не удалось прочитать request.txt:', err.message);
   process.exit(1);
 }
+
+console.log('📄 Загружено запросов:', queries.length);
 
 const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'puppeteer-profile-'));
 console.log('📁 Временный профиль создан:', userDataDir);
