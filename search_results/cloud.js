@@ -1,11 +1,27 @@
 import puppeteer from 'puppeteer';
 import { readFile, writeFile } from 'fs/promises';
+import readline from 'readline';
 
 // Конфигурация браузера
 const CONFIG = {
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   viewport: { width: 1920, height: 1080 }
 };
+
+// Функция ожидания нажатия Enter
+function waitForUserInput(message) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    rl.question(`\n${message}\nНажмите Enter для продолжения...`, () => {
+      rl.close();
+      resolve();
+    });
+  });
+}
 
 // Основная функция парсера
 async function parseYandexSearch() {
@@ -22,7 +38,7 @@ async function parseYandexSearch() {
 
     // Запускаем браузер с настройками
     browser = await puppeteer.launch({
-      headless: false, // Установите true для фонового режима
+      headless: false, // Установите true для фонового режима или false для не фонового режима
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
@@ -47,10 +63,32 @@ async function parseYandexSearch() {
 
       try {
         const searchResults = await searchQuery(page, query);
-        results.push(...searchResults);
+        
+        // Проверяем, найдено ли 0 результатов
+        if (searchResults.length === 0) {
+          console.warn(`⚠️ ВНИМАНИЕ: Найдено 0 результатов для запроса "${query}"`);
+          console.log('Скрипт приостановлен. Проверьте страницу в браузере.');
+          console.log('Возможные причины: капча, блокировка, изменение структуры страницы.');
+          
+          // Ждем действия пользователя
+          await waitForUserInput('После исправления ситуации');
+          
+          // Повторяем попытку для того же запроса
+          console.log(`Повторная попытка для запроса "${query}"...`);
+          const retryResults = await searchQuery(page, query);
+          results.push(...retryResults);
+          
+          if (retryResults.length === 0) {
+            console.warn('⚠️ Результатов по-прежнему 0. Пропускаем запрос.');
+          } else {
+            console.log(`✓ Успешно получено ${retryResults.length} результатов`);
+          }
+        } else {
+          results.push(...searchResults);
+        }
 
         // Случайная задержка между запросами (3-7 секунд)
-        const delay = 3000 + Math.random() * 4000;
+        const delay = 1000 + Math.random() * 2000;
         console.log(`Пауза ${Math.round(delay / 1000)} сек...`);
         await sleep(delay);
 
@@ -123,11 +161,7 @@ async function searchQuery(page, query) {
 
   // Извлекаем органические результаты
   const results = await page.evaluate((searchQuery) => {
-    // --------------------------------------------------------------------------------------------------
-    // ИСПРАВЛЕНИЕ: Функция determinePageType была перемещена в начало блока evaluate 
-    // для корректного обеспечения области видимости и "поднятия" (hoisting)
-    // --------------------------------------------------------------------------------------------------
-    
+      
     // Функция определения типа страницы
     function determinePageType(url) {
       const lowerUrl = url.toLowerCase();
@@ -145,7 +179,7 @@ async function searchQuery(page, query) {
         '/wiki',
         '/knowledge',
         '/learn',
-        'education', // Добавил пробел для 'education'
+        'education',
         '/tips',
         '/advice',
         '/howto',
@@ -163,7 +197,15 @@ async function searchQuery(page, query) {
         '/stati',
         '/statya',
         '/novosti',
-        '/obzor'
+        '/obzor',
+        '/analytics',
+        '/support',
+        '/docs',
+        '/links',
+        '/opinions',
+        '/technology',
+        '/technologies',
+        '/kursfinder'
       ];
 
       // Проверяем наличие информационных паттернов
@@ -188,7 +230,12 @@ async function searchQuery(page, query) {
         '/kupit',
         '/magazin',
         '/tovar',
-        '/katalog'
+        '/katalog',
+        '/services',
+        '/solutions',
+        '/pricing',
+        '/',
+        '/protection'
       ];
 
       const isCommerce = commercePatterns.some(pattern => lowerUrl.includes(pattern));
@@ -199,8 +246,6 @@ async function searchQuery(page, query) {
 
       return 'Непонятная';
     }
-    
-    // --------------------------------------------------------------------------------------------------
     
     const organicResults = [];
 
@@ -226,7 +271,7 @@ async function searchQuery(page, query) {
           const linkType = url.includes('yabs.yandex.ru') ? 'Реклама' : 'Органика';
 
           // Определяем тип страницы
-          const pageType = determinePageType(url); // <-- Теперь функция доступна
+          const pageType = determinePageType(url);
 
           organicResults.push({
             query: searchQuery,
@@ -244,7 +289,7 @@ async function searchQuery(page, query) {
     return organicResults;
   }, query);
 
-  console.log(`  Найдено ${results.length} результатов`);
+  console.log(`  Найдено ${results.length} результатов`);
   return results;
 }
 
