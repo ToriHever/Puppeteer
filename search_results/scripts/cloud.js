@@ -29,7 +29,7 @@ async function parseYandexSearch() {
 
   try {
     // Читаем список запросов
-    const queries = await readQueries('queries.txt');
+    const queries = await readQueries('scripts/queries.txt');
     console.log(`Загружено ${queries.length} запросов`);
 
     // Читаем куки из файла
@@ -98,7 +98,7 @@ async function parseYandexSearch() {
     }
 
     // Сохраняем результаты в CSV
-    await saveToCSV(results, 'results.csv');
+    await saveToCSV(results, 'results/results.csv');
     console.log('\n✓ Парсинг завершен! Результаты сохранены в results.csv');
 
   } catch (error) {
