@@ -5,6 +5,11 @@ import path from 'path'
 import os from 'os'
 import { sendTelegramMessage } from '../Notifications_Telegram.js'
 
+import { fileURLToPath } from 'url'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+
 puppeteer.use(StealthPlugin())
 
 // --- Настройка числа воркеров вручную ---
@@ -130,7 +135,9 @@ async function main() {
     console.log('CSV will be written to:', csvPath)
     await initCsv(csvPath)
 
-    const domensTxt = await fs.readFile(path.resolve('domens.txt'), 'utf-8')
+    const domensPath = path.join(__dirname, 'domens.txt')
+    const domensTxt = await fs.readFile(domensPath, 'utf-8')
+
     const domains = domensTxt.split('\n').map(d => d.trim()).filter(Boolean)
     if (!domains.length) {
         const err = 'domens.txt пуст'

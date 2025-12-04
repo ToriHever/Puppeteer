@@ -7,7 +7,7 @@ import { createObjectCsvWriter as createCsvWriter } from 'csv-writer';
 puppeteer.use(StealthPlugin());
 
 const COOKIES_PATH = './cookiesWordstat.json';
-const TARGET_URL = 'https://cp.unisender.com/ru/v5/cdp/lists/1132';
+const TARGET_URL = 'https://cp.unisender.com/ru/v5/cdp/lists/1077';
 const OUTPUT_CSV = './contacts.csv';
 const sleep = ms => new Promise(res => setTimeout(res, ms));
 
