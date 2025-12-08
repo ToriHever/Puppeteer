@@ -1,31 +1,155 @@
 import puppeteer from 'puppeteer';
-import { readFile, writeFile } from 'fs/promises';
+import { readFile, writeFile, access } from 'fs/promises';
+import { existsSync } from 'fs';
 import readline from 'readline';
+import path from 'path';
 
 // Конфигурация браузера
 const CONFIG = {
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  viewport: { width: 1920, height: 1080 }
+  viewport: { width: 1920, height: 1080 },
+  minResultsThreshold: 10 // Минимальное количество результатов
 };
 
-// Функция ожидания нажатия Enter
-function waitForUserInput(message) {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
+// Функция сохранения промежуточных результатов
+async function saveIntermediateResults(results, incompleteQueries) {
+  try {
+    // Сохраняем результаты
+    if (results.length > 0) {
+      const resultsFilename = getUniqueFilename('results/results_intermediate.csv');
+      await saveToCSV(results, resultsFilename);
+      console.log(`\n💾 Промежуточные результаты сохранены: ${resultsFilename}`);
+      console.log(`   Сохранено результатов: ${results.length}`);
+    }
+    
+    // Сохраняем неполные запросы
+    if (incompleteQueries.length > 0) {
+      await saveIncompleteQueries(incompleteQueries, 'results/incomplete_queries_intermediate.txt');
+    }
+  } catch (error) {
+    console.error('Ошибка при сохранении промежуточных результатов:', error.message);
+  }
+}
 
-    rl.question(`\n${message}\nНажмите Enter для продолжения...`, () => {
-      rl.close();
-      resolve();
+// Функция хаотичного движения мыши
+async function randomMouseMovement(page, duration = 2000) {
+  const viewport = page.viewport();
+  const startTime = Date.now();
+  
+  console.log('🖱️  Имитация движения мыши...');
+  
+  while (Date.now() - startTime < duration) {
+    // Генерируем случайные координаты
+    const x = Math.floor(Math.random() * viewport.width);
+    const y = Math.floor(Math.random() * viewport.height);
+    
+    // Двигаем мышь с небольшой задержкой
+    await page.mouse.move(x, y, { steps: Math.floor(Math.random() * 10) + 5 });
+    
+    // Случайная пауза между движениями (50-200мс)
+    await sleep(50 + Math.random() * 150);
+    
+    // Иногда делаем небольшие круговые движения
+    if (Math.random() > 0.7) {
+      const radius = 20 + Math.random() * 30;
+      for (let angle = 0; angle < Math.PI * 2; angle += 0.3) {
+        const newX = x + Math.cos(angle) * radius;
+        const newY = y + Math.sin(angle) * radius;
+        await page.mouse.move(newX, newY, { steps: 2 });
+        await sleep(30);
+      }
+    }
+  }
+}
+// Функция ожидания нажатия Enter
+  async function waitForUserInput(message) { 
+    return new Promise((resolve) => {
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+
+      rl.question(`\n${message}\nНажмите Enter для продолжения...`, () => {
+        rl.close();
+        resolve();
+      });
     });
-  });
+  }
+
+// Функция сохранения куки
+async function saveCookies(page, filename) {
+  try {
+    const cookies = await page.cookies();
+    await writeFile(filename, JSON.stringify(cookies, null, 2), 'utf-8');
+    console.log('✓ Куки успешно сохранены');
+    return true;
+  } catch (error) {
+    console.error('Ошибка при сохранении куки:', error.message);
+    return false;
+  }
+}
+
+// Функция генерации имени файла с датой
+function generateFilenameWithDate(baseName, extension) {
+  const now = new Date();
+  const dateStr = now.toISOString().split('T')[0]; // YYYY-MM-DD
+  const timeStr = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+  
+  const nameWithoutExt = baseName.replace(new RegExp(`\\${extension}$`), '');
+  return `${nameWithoutExt}_${dateStr}_${timeStr}${extension}`;
+}
+
+// Функция получения уникального имени файла
+function getUniqueFilename(filename) {
+  if (!existsSync(filename)) {
+    return filename;
+  }
+  
+  const ext = path.extname(filename);
+  const base = path.basename(filename, ext);
+  const dir = path.dirname(filename);
+  
+  return path.join(dir, generateFilenameWithDate(base, ext));
+}
+
+// Функция сохранения запросов с недостаточными результатами
+async function saveIncompleteQueries(queries, filename) {
+  try {
+    const uniqueFilename = getUniqueFilename(filename);
+    const content = queries.join('\n');
+    await writeFile(uniqueFilename, content, 'utf-8');
+    console.log(`\n✓ Запросы с недостаточными результатами сохранены в: ${uniqueFilename}`);
+    console.log(`  Всего запросов: ${queries.length}`);
+  } catch (error) {
+    console.error('Ошибка при сохранении неполных запросов:', error.message);
+  }
 }
 
 // Основная функция парсера
 async function parseYandexSearch() {
   let browser;
+  let results = [];
+  let incompleteQueries = [];
+
+  // Обработчик прерывания (Ctrl+C)
+  const handleInterrupt = async (signal) => {
+    console.log(`\n\n⚠️ Получен сигнал прерывания (${signal})`);
+    console.log('Сохранение промежуточных результатов...');
+    
+    await saveIntermediateResults(results, incompleteQueries);
+    
+    if (browser) {
+      console.log('Закрытие браузера...');
+      await browser.close();
+    }
+    
+    console.log('✓ Скрипт остановлен');
+    process.exit(0);
+  };
+
+  // Регистрируем обработчики сигналов
+  process.on('SIGINT', handleInterrupt);  // Ctrl+C
+  process.on('SIGTERM', handleInterrupt); // Kill команда
 
   try {
     // Читаем список запросов
@@ -33,12 +157,12 @@ async function parseYandexSearch() {
     console.log(`Загружено ${queries.length} запросов`);
 
     // Читаем куки из файла
-    const cookies = await readCookies('cookiesWordstat.json');
+    const cookies = await readCookies('./scripts/cookiesWordstat.json');
     console.log(`Загружено ${cookies.length} куки`);
 
     // Запускаем браузер с настройками
     browser = await puppeteer.launch({
-      headless: false, // Установите true для фонового режима или false для не фонового режима
+      headless: false,
       args: [
         '--no-sandbox',
         '--start-maximized',
@@ -54,60 +178,101 @@ async function parseYandexSearch() {
     // Настраиваем браузер
     await configureBrowser(page, cookies);
 
-    // Массив для результатов
-    const results = [];
-
     // Парсим каждый запрос
     for (let i = 0; i < queries.length; i++) {
       const query = queries[i];
-      console.log(`\nОбработка запроса ${i + 1}/${queries.length}: "${query}"`);
+      console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`Обработка запроса ${i + 1}/${queries.length}: "${query}"`);
+      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
       try {
         const searchResults = await searchQuery(page, query);
         
-        // Проверяем, найдено ли 0 результатов
-        if (searchResults.length === 0) {
-          console.warn(`⚠️ ВНИМАНИЕ: Найдено 0 результатов для запроса "${query}"`);
-          console.log('Скрипт приостановлен. Проверьте страницу в браузере.');
-          console.log('Возможные причины: капча, блокировка, изменение структуры страницы.');
+        // Проверяем количество результатов
+        if (searchResults.length < CONFIG.minResultsThreshold) {
+          console.warn(`⚠️ ВНИМАНИЕ: Найдено только ${searchResults.length} результатов (ожидалось минимум ${CONFIG.minResultsThreshold})`);
+          console.log('Возможная причина: КАПЧА или блокировка');
+          console.log('📍 Откройте браузер и пройдите капчу вручную');
+          
+          // Добавляем в список неполных запросов
+          incompleteQueries.push(query);
           
           // Ждем действия пользователя
-          await waitForUserInput('После исправления ситуации');
+          await waitForUserInput('После прохождения капчи');
+          
+          // Сохраняем обновленные куки
+          console.log('Сохранение обновленных куки...');
+          await saveCookies(page, './scripts/cookiesWordstat.json');
           
           // Повторяем попытку для того же запроса
           console.log(`Повторная попытка для запроса "${query}"...`);
           const retryResults = await searchQuery(page, query);
-          results.push(...retryResults);
           
-          if (retryResults.length === 0) {
-            console.warn('⚠️ Результатов по-прежнему 0. Пропускаем запрос.');
+          if (retryResults.length < CONFIG.minResultsThreshold) {
+            console.warn(`⚠️ Результатов по-прежнему недостаточно: ${retryResults.length}`);
+            console.log('Пропускаем запрос и продолжаем...');
           } else {
             console.log(`✓ Успешно получено ${retryResults.length} результатов`);
+            // Удаляем из списка неполных, если повторная попытка успешна
+            const index = incompleteQueries.indexOf(query);
+            if (index > -1) {
+              incompleteQueries.splice(index, 1);
+            }
           }
+          
+          results.push(...retryResults);
         } else {
+          console.log(`✓ Найдено ${searchResults.length} результатов`);
           results.push(...searchResults);
         }
 
-        // Случайная задержка между запросами (3-7 секунд)
-        const delay = 1000 + Math.random() * 2000;
-        console.log(`Пауза ${Math.round(delay / 1000)} сек...`);
-        await sleep(delay);
+        // Случайная задержка между запросами (2-5 секунд) с одновременным движением мыши
+        const delay = 2000 + Math.random() * 3000;
+        console.log(`⏱ Пауза ${Math.round(delay / 1000)} сек с имитацией движения мыши...`);
+        
+        // Запускаем движение мыши и паузу одновременно
+        await Promise.all([
+          randomMouseMovement(page, delay),
+          sleep(delay)
+        ]);
 
       } catch (error) {
-        console.error(`Ошибка при обработке запроса "${query}":`, error.message);
+        console.error(`❌ Ошибка при обработке запроса "${query}":`, error.message);
+        incompleteQueries.push(query);
       }
     }
 
+    // Генерируем уникальное имя файла для результатов
+    const resultsFilename = getUniqueFilename('results/results.csv');
+    
     // Сохраняем результаты в CSV
-    await saveToCSV(results, 'results/results.csv');
-    console.log('\n✓ Парсинг завершен! Результаты сохранены в results.csv');
+    await saveToCSV(results, resultsFilename);
+    console.log(`\n✓ Парсинг завершен! Результаты сохранены в: ${resultsFilename}`);
+    console.log(`  Всего обработано запросов: ${queries.length}`);
+    console.log(`  Всего найдено результатов: ${results.length}`);
+
+    // Сохраняем запросы с недостаточными результатами
+    if (incompleteQueries.length > 0) {
+      await saveIncompleteQueries(incompleteQueries, 'results/incomplete_queries.txt');
+    } else {
+      console.log('\n✓ Все запросы обработаны успешно!');
+    }
 
   } catch (error) {
-    console.error('Критическая ошибка:', error);
+    console.error('❌ Критическая ошибка:', error);
+    
+    // Сохраняем промежуточные результаты при ошибке
+    console.log('\n💾 Сохранение промежуточных результатов из-за ошибки...');
+    await saveIntermediateResults(results, incompleteQueries);
+    
   } finally {
     if (browser) {
       await browser.close();
     }
+    
+    // Удаляем обработчики сигналов
+    process.removeAllListeners('SIGINT');
+    process.removeAllListeners('SIGTERM');
   }
 }
 
@@ -122,7 +287,7 @@ async function configureBrowser(page, cookies) {
   // Устанавливаем куки из файла
   if (cookies && cookies.length > 0) {
     await page.setCookie(...cookies);
-    console.log('Куки успешно установлены');
+    console.log('✓ Куки успешно установлены');
   }
 
   // Скрываем признаки автоматизации
@@ -156,6 +321,18 @@ async function searchQuery(page, query) {
     waitUntil: 'networkidle2',
     timeout: 30000
   });
+
+  // Небольшая задержка после загрузки страницы
+  await sleep(500 + Math.random() * 500);
+
+  // Делаем несколько случайных движений мыши по странице
+  const viewport = page.viewport();
+  for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
+    const x = Math.floor(Math.random() * viewport.width);
+    const y = Math.floor(Math.random() * viewport.height);
+    await page.mouse.move(x, y, { steps: 10 + Math.floor(Math.random() * 10) });
+    await sleep(100 + Math.random() * 200);
+  }
 
   // Ждем загрузки результатов
   await page.waitForSelector('.serp-item, .OrganicTitle', { timeout: 10000 }).catch(() => {});
@@ -293,7 +470,7 @@ async function searchQuery(page, query) {
     return organicResults;
   }, query);
 
-  console.log(`  Найдено ${results.length} результатов`);
+  console.log(`  📊 Найдено ${results.length} результатов`);
   return results;
 }
 
@@ -326,7 +503,7 @@ async function readCookies(filename) {
 
     return [];
   } catch (error) {
-    console.warn(`Предупреждение: не удалось загрузить куки из ${filename}: ${error.message}`);
+    console.warn(`⚠️ Предупреждение: не удалось загрузить куки из ${filename}: ${error.message}`);
     return [];
   }
 }
