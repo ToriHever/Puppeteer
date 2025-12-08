@@ -41,6 +41,7 @@ async function parseYandexSearch() {
       headless: false, // Установите true для фонового режима или false для не фонового режима
       args: [
         '--no-sandbox',
+        '--start-maximized',
         '--disable-setuid-sandbox',
         '--disable-blink-features=AutomationControlled',
         '--disable-web-security',
@@ -205,7 +206,10 @@ async function searchQuery(page, query) {
         '/opinions',
         '/technology',
         '/technologies',
-        '/kursfinder'
+        '/kursfinder',
+        '/actions',
+        'jetinfo.ru',
+        'xakep.ru'
       ];
 
       // Проверяем наличие информационных паттернов
