@@ -11,6 +11,69 @@ const CONFIG = {
   minResultsThreshold: 10 // Минимальное количество результатов
 };
 
+// Режимы работы
+const MODES = {
+  COOKIE: 'cookie',
+  INCOGNITO: 'incognito'
+};
+
+// Функция выбора режима работы
+function selectMode() {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    console.log('\n╔═══════════════════════════════════════════════════╗');
+    console.log('║         ВЫБОР РЕЖИМА РАБОТЫ ПАРСЕРА              ║');
+    console.log('╚═══════════════════════════════════════════════════╝\n');
+    console.log('1. 🍪 Режим с куками (сохранение сессии)');
+    console.log('   - Использует сохраненные куки');
+    console.log('   - Пересохраняет куки после прохождения капчи');
+    console.log('   - Рекомендуется для больших объемов');
+    console.log('\n2. 🕶️  Режим инкогнито (без куков)');
+    console.log('   - Каждый запрос как новый пользователь');
+    console.log('   - Не сохраняет куки');
+    console.log('   - Полностью анонимный режим\n');
+
+    rl.question('Выберите режим (1 или 2): ', (answer) => {
+      rl.close();
+      const mode = answer.trim() === '2' ? MODES.INCOGNITO : MODES.COOKIE;
+      console.log(`\n✓ Выбран режим: ${mode === MODES.COOKIE ? '🍪 С куками' : '🕶️  Инкогнито'}\n`);
+      resolve(mode);
+    });
+  });
+}
+
+// Функция ожидания нажатия Enter
+function waitForUserInput(message) {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+
+    rl.question(`\n${message}\nНажмите Enter для продолжения...`, () => {
+      rl.close();
+      resolve();
+    });
+  });
+}
+
+// Функция сохранения куки
+async function saveCookies(page, filename) {
+  try {
+    const cookies = await page.cookies();
+    await writeFile(filename, JSON.stringify(cookies, null, 2), 'utf-8');
+    console.log('✓ Куки успешно сохранены');
+    return true;
+  } catch (error) {
+    console.error('Ошибка при сохранении куки:', error.message);
+    return false;
+  }
+}
+
 // Функция сохранения промежуточных результатов
 async function saveIntermediateResults(results, incompleteQueries) {
   try {
@@ -61,33 +124,6 @@ async function randomMouseMovement(page, duration = 2000) {
     }
   }
 }
-// Функция ожидания нажатия Enter
-  async function waitForUserInput(message) { 
-    return new Promise((resolve) => {
-      const rl = readline.createInterface({
-        input: process.stdin,
-        output: process.stdout
-      });
-
-      rl.question(`\n${message}\nНажмите Enter для продолжения...`, () => {
-        rl.close();
-        resolve();
-      });
-    });
-  }
-
-// Функция сохранения куки
-async function saveCookies(page, filename) {
-  try {
-    const cookies = await page.cookies();
-    await writeFile(filename, JSON.stringify(cookies, null, 2), 'utf-8');
-    console.log('✓ Куки успешно сохранены');
-    return true;
-  } catch (error) {
-    console.error('Ошибка при сохранении куки:', error.message);
-    return false;
-  }
-}
 
 // Функция генерации имени файла с датой
 function generateFilenameWithDate(baseName, extension) {
@@ -130,6 +166,7 @@ async function parseYandexSearch() {
   let browser;
   let results = [];
   let incompleteQueries = [];
+  let mode;
 
   // Обработчик прерывания (Ctrl+C)
   const handleInterrupt = async (signal) => {
@@ -152,16 +189,25 @@ async function parseYandexSearch() {
   process.on('SIGTERM', handleInterrupt); // Kill команда
 
   try {
+    // Выбор режима работы
+    mode = await selectMode();
+
     // Читаем список запросов
     const queries = await readQueries('scripts/queries.txt');
     console.log(`Загружено ${queries.length} запросов`);
 
-    // Читаем куки из файла
-    const cookies = await readCookies('./scripts/cookiesWordstat.json');
-    console.log(`Загружено ${cookies.length} куки`);
+    let cookies = [];
+    
+    // Читаем куки только в режиме с куками
+    if (mode === MODES.COOKIE) {
+      cookies = await readCookies('./scripts/cookiesWordstat.json');
+      console.log(`Загружено ${cookies.length} куки`);
+    } else {
+      console.log('🕶️  Режим инкогнито: куки не используются');
+    }
 
     // Запускаем браузер с настройками
-    browser = await puppeteer.launch({
+    const launchOptions = {
       headless: false,
       args: [
         '--no-sandbox',
@@ -171,12 +217,19 @@ async function parseYandexSearch() {
         '--disable-web-security',
         '--disable-features=IsolateOrigins,site-per-process'
       ]
-    });
+    };
+
+    // В режиме инкогнито добавляем соответствующий флаг
+    if (mode === MODES.INCOGNITO) {
+      launchOptions.args.push('--incognito');
+    }
+
+    browser = await puppeteer.launch(launchOptions);
 
     const page = await browser.newPage();
 
-    // Настраиваем браузер
-    await configureBrowser(page, cookies);
+    // Настраиваем браузер (куки передаются только в режиме с куками)
+    await configureBrowser(page, mode === MODES.COOKIE ? cookies : []);
 
     // Парсим каждый запрос
     for (let i = 0; i < queries.length; i++) {
@@ -200,9 +253,13 @@ async function parseYandexSearch() {
           // Ждем действия пользователя
           await waitForUserInput('После прохождения капчи');
           
-          // Сохраняем обновленные куки
-          console.log('Сохранение обновленных куки...');
-          await saveCookies(page, './scripts/cookiesWordstat.json');
+          // Сохраняем обновленные куки ТОЛЬКО в режиме с куками
+          if (mode === MODES.COOKIE) {
+            console.log('🍪 Сохранение обновленных куки...');
+            await saveCookies(page, './scripts/cookiesWordstat.json');
+          } else {
+            console.log('🕶️  Режим инкогнито: куки не сохраняются');
+          }
           
           // Повторяем попытку для того же запроса
           console.log(`Повторная попытка для запроса "${query}"...`);
@@ -248,6 +305,7 @@ async function parseYandexSearch() {
     // Сохраняем результаты в CSV
     await saveToCSV(results, resultsFilename);
     console.log(`\n✓ Парсинг завершен! Результаты сохранены в: ${resultsFilename}`);
+    console.log(`  Режим работы: ${mode === MODES.COOKIE ? '🍪 С куками' : '🕶️  Инкогнито'}`);
     console.log(`  Всего обработано запросов: ${queries.length}`);
     console.log(`  Всего найдено результатов: ${results.length}`);
 
@@ -284,7 +342,7 @@ async function configureBrowser(page, cookies) {
   // Устанавливаем viewport
   await page.setViewport(CONFIG.viewport);
 
-  // Устанавливаем куки из файла
+  // Устанавливаем куки из файла (если есть)
   if (cookies && cookies.length > 0) {
     await page.setCookie(...cookies);
     console.log('✓ Куки успешно установлены');
