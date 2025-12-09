@@ -4,6 +4,10 @@ import { existsSync } from 'fs';
 import readline from 'readline';
 import path from 'path';
 
+// Глобальная переменная для управления паузой
+let isPaused = false;
+let pauseMessage = '';
+
 // Конфигурация браузера
 const CONFIG = {
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -11,20 +15,129 @@ const CONFIG = {
   minResultsThreshold: 10 // Минимальное количество результатов
 };
 
+// Функция инициализации обработчика горячих клавиш
+function initializeHotkeys() {
+  if (process.stdin.isTTY) {
+    readline.emitKeypressEvents(process.stdin);
+    process.stdin.setRawMode(true);
+    process.stdin.resume(); // Важно: активируем stdin
+    
+    process.stdin.on('keypress', (str, key) => {
+      // Обработка Ctrl+C для корректного завершения
+      if (key.ctrl && key.name === 'c') {
+        return; // Позволяем обработчику SIGINT сработать
+      }
+      
+      // Игнорируем Enter если он не обрабатывается waitForUserInput
+      if (key.name === 'return') {
+        return; // Enter обрабатывается отдельной логикой
+      }
+      
+      // Горячая клавиша 'p' для паузы/возобновления
+      if (key.name === 'p' || key.name === 'з') {
+        isPaused = !isPaused;
+        if (isPaused) {
+          console.log('\n\n⏸️  ═══════════════════════════════════════════════════');
+          console.log('⏸️  СКРИПТ ПРИОСТАНОВЛЕН');
+          console.log('⏸️  Нажмите "P" для возобновления работы');
+          console.log('⏸️  ═══════════════════════════════════════════════════\n');
+          pauseMessage = '⏸️  [ПАУЗА] ';
+        } else {
+          console.log('\n▶️  ═══════════════════════════════════════════════════');
+          console.log('▶️  СКРИПТ ВОЗОБНОВЛЕН');
+          console.log('▶️  ═══════════════════════════════════════════════════\n');
+          pauseMessage = '';
+        }
+      }
+      
+      // Горячая клавиша 'h' для справки
+      if (key.name === 'h' || key.name === 'р') {
+        console.log('\n📋 ═══════════════════════════════════════════════════');
+        console.log('📋 ГОРЯЧИЕ КЛАВИШИ:');
+        console.log('📋 ═══════════════════════════════════════════════════');
+        console.log('   P - Пауза/Возобновление работы скрипта');
+        console.log('   H - Показать эту справку');
+        console.log('   Ctrl+C - Сохранить результаты и выйти');
+        console.log('📋 ═══════════════════════════════════════════════════\n');
+      }
+    });
+    
+    console.log('\n⌨️  Горячие клавиши активированы:');
+    console.log('   • P - Пауза/Возобновление');
+    console.log('   • H - Справка');
+    console.log('   • Ctrl+C - Выход с сохранением\n');
+  }
+}
+
+// Функция ожидания с проверкой паузы
+async function sleepWithPauseCheck(ms) {
+  const startTime = Date.now();
+  const checkInterval = 100; // Проверяем каждые 100мс
+  
+  while (Date.now() - startTime < ms) {
+    if (isPaused) {
+      // Ждем пока пауза не будет снята
+      while (isPaused) {
+        await sleep(checkInterval);
+      }
+      // После снятия паузы продолжаем с того места где остановились
+    }
+    await sleep(Math.min(checkInterval, ms - (Date.now() - startTime)));
+  }
+}
+
+// Функция движения мыши с проверкой паузы
+async function randomMouseMovementWithPause(page, duration = 2000) {
+  const viewport = page.viewport();
+  const startTime = Date.now();
+  
+  console.log(`${pauseMessage}🖱️  Имитация движения мыши...`);
+  
+  while (Date.now() - startTime < duration) {
+    // Проверяем паузу
+    if (isPaused) {
+      while (isPaused) {
+        await sleep(100);
+      }
+    }
+    
+    // Генерируем случайные координаты
+    const x = Math.floor(Math.random() * viewport.width);
+    const y = Math.floor(Math.random() * viewport.height);
+    
+    // Двигаем мышь с небольшой задержкой
+    await page.mouse.move(x, y, { steps: Math.floor(Math.random() * 10) + 5 });
+    
+    // Случайная пауза между движениями (50-200мс)
+    await sleep(50 + Math.random() * 150);
+    
+    // Иногда делаем небольшие круговые движения
+    if (Math.random() > 0.7) {
+      const radius = 20 + Math.random() * 30;
+      for (let angle = 0; angle < Math.PI * 2; angle += 0.3) {
+        if (isPaused) {
+          while (isPaused) {
+            await sleep(100);
+          }
+        }
+        const newX = x + Math.cos(angle) * radius;
+        const newY = y + Math.sin(angle) * radius;
+        await page.mouse.move(newX, newY, { steps: 2 });
+        await sleep(30);
+      }
+    }
+  }
+}
+
 // Режимы работы
 const MODES = {
   COOKIE: 'cookie',
   INCOGNITO: 'incognito'
 };
 
-// Функция выбора режима работы
+// Функция выбора режима работы (совместимая с горячими клавишами)
 function selectMode() {
   return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-
     console.log('\n╔═══════════════════════════════════════════════════╗');
     console.log('║         ВЫБОР РЕЖИМА РАБОТЫ ПАРСЕРА              ║');
     console.log('╚═══════════════════════════════════════════════════╝\n');
@@ -36,28 +149,40 @@ function selectMode() {
     console.log('   - Каждый запрос как новый пользователь');
     console.log('   - Не сохраняет куки');
     console.log('   - Полностью анонимный режим\n');
+    console.log('Выберите режим (1 или 2): ');
 
-    rl.question('Выберите режим (1 или 2): ', (answer) => {
-      rl.close();
-      const mode = answer.trim() === '2' ? MODES.INCOGNITO : MODES.COOKIE;
-      console.log(`\n✓ Выбран режим: ${mode === MODES.COOKIE ? '🍪 С куками' : '🕶️  Инкогнито'}\n`);
-      resolve(mode);
-    });
+    let resolved = false;
+    const onKeypress = (str, key) => {
+      if (!resolved && (str === '1' || str === '2')) {
+        resolved = true;
+        process.stdin.removeListener('keypress', onKeypress);
+        const mode = str === '2' ? MODES.INCOGNITO : MODES.COOKIE;
+        console.log(`\n✓ Выбран режим: ${mode === MODES.COOKIE ? '🍪 С куками' : '🕶️  Инкогнито'}\n`);
+        resolve(mode);
+      }
+    };
+
+    process.stdin.on('keypress', onKeypress);
   });
 }
 
-// Функция ожидания нажатия Enter
+// Функция ожидания нажатия Enter (совместимая с горячими клавишами)
 function waitForUserInput(message) {
   return new Promise((resolve) => {
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-
-    rl.question(`\n${message}\nНажмите Enter для продолжения...`, () => {
-      rl.close();
-      resolve();
-    });
+    console.log(`\n${message}`);
+    console.log('Нажмите Enter для продолжения...');
+    
+    let resolved = false;
+    const onKeypress = (str, key) => {
+      if (!resolved && key.name === 'return') {
+        resolved = true;
+        process.stdin.removeListener('keypress', onKeypress);
+        console.log('✓ Продолжение работы...\n');
+        resolve();
+      }
+    };
+    
+    process.stdin.on('keypress', onKeypress);
   });
 }
 
@@ -96,33 +221,7 @@ async function saveIntermediateResults(results, incompleteQueries) {
 
 // Функция хаотичного движения мыши
 async function randomMouseMovement(page, duration = 2000) {
-  const viewport = page.viewport();
-  const startTime = Date.now();
-  
-  console.log('🖱️  Имитация движения мыши...');
-  
-  while (Date.now() - startTime < duration) {
-    // Генерируем случайные координаты
-    const x = Math.floor(Math.random() * viewport.width);
-    const y = Math.floor(Math.random() * viewport.height);
-    
-    // Двигаем мышь с небольшой задержкой
-    await page.mouse.move(x, y, { steps: Math.floor(Math.random() * 10) + 5 });
-    
-    // Случайная пауза между движениями (50-200мс)
-    await sleep(50 + Math.random() * 150);
-    
-    // Иногда делаем небольшие круговые движения
-    if (Math.random() > 0.7) {
-      const radius = 20 + Math.random() * 30;
-      for (let angle = 0; angle < Math.PI * 2; angle += 0.3) {
-        const newX = x + Math.cos(angle) * radius;
-        const newY = y + Math.sin(angle) * radius;
-        await page.mouse.move(newX, newY, { steps: 2 });
-        await sleep(30);
-      }
-    }
-  }
+  return randomMouseMovementWithPause(page, duration);
 }
 
 // Функция генерации имени файла с датой
@@ -189,6 +288,9 @@ async function parseYandexSearch() {
   process.on('SIGTERM', handleInterrupt); // Kill команда
 
   try {
+    // Инициализируем горячие клавиши ПЕРЕД выбором режима
+    initializeHotkeys();
+
     // Выбор режима работы
     mode = await selectMode();
 
@@ -233,10 +335,18 @@ async function parseYandexSearch() {
 
     // Парсим каждый запрос
     for (let i = 0; i < queries.length; i++) {
+      // Проверяем паузу перед началом обработки запроса
+      if (isPaused) {
+        console.log(`\n${pauseMessage}Ожидание возобновления...`);
+        while (isPaused) {
+          await sleep(100);
+        }
+      }
+
       const query = queries[i];
-      console.log(`\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-      console.log(`Обработка запроса ${i + 1}/${queries.length}: "${query}"`);
-      console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`\n${pauseMessage}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+      console.log(`${pauseMessage}Обработка запроса ${i + 1}/${queries.length}: "${query}"`);
+      console.log(`${pauseMessage}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
 
       try {
         const searchResults = await searchQuery(page, query);
@@ -279,18 +389,18 @@ async function parseYandexSearch() {
           
           results.push(...retryResults);
         } else {
-          console.log(`✓ Найдено ${searchResults.length} результатов`);
+          console.log(`${pauseMessage}✓ Найдено ${searchResults.length} результатов`);
           results.push(...searchResults);
         }
 
         // Случайная задержка между запросами (2-5 секунд) с одновременным движением мыши
         const delay = 2000 + Math.random() * 3000;
-        console.log(`⏱ Пауза ${Math.round(delay / 1000)} сек с имитацией движения мыши...`);
+        console.log(`${pauseMessage}⏱ Пауза ${Math.round(delay / 1000)} сек с имитацией движения мыши...`);
         
-        // Запускаем движение мыши и паузу одновременно
+        // Запускаем движение мыши и паузу одновременно с проверкой паузы
         await Promise.all([
           randomMouseMovement(page, delay),
-          sleep(delay)
+          sleepWithPauseCheck(delay)
         ]);
 
       } catch (error) {
@@ -328,9 +438,16 @@ async function parseYandexSearch() {
       await browser.close();
     }
     
+    // Восстанавливаем нормальный режим терминала
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+    }
+    
     // Удаляем обработчики сигналов
     process.removeAllListeners('SIGINT');
     process.removeAllListeners('SIGTERM');
+    process.removeAllListeners('keypress');
   }
 }
 
