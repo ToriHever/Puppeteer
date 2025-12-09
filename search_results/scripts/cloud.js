@@ -561,7 +561,13 @@ async function searchQuery(page, query) {
         '/kursfinder',
         '/actions',
         'jetinfo.ru',
-        'xakep.ru'
+        'xakep.ru',
+        'vc.ru',
+        'ru.hostings.info',
+        'pro-hosting.online',
+        'hostradar.ru',
+        'ru.tophosts.net',
+        'dtf.ru'
       ];
 
       // Проверяем наличие информационных паттернов
