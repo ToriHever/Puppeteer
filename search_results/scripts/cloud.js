@@ -199,13 +199,58 @@ async function saveCookies(page, filename) {
   }
 }
 
+// Функция определения типа запроса на основе соотношения коммерческих и информационных страниц
+function determineQueryType(results, query) {
+  // Фильтруем только органические результаты для данного запроса
+  const organicResults = results.filter(r => r.query === query && r.type === 'Органика');
+  
+  if (organicResults.length === 0) {
+    return 'Неопределенный';
+  }
+  
+  // Подсчитываем коммерческие страницы
+  const commercialCount = organicResults.filter(r => r.pageType === 'Коммерческая').length;
+  
+  // Вычисляем соотношение
+  const ratio = commercialCount / organicResults.length;
+  
+  // Определяем тип запроса по условиям
+  if (ratio > 0.4 && ratio <= 0.6) {
+    return 'Полукоммерческий';
+  } else if (ratio <= 0.4) {
+    return 'Информационный';
+  } else { // ratio > 0.6
+    return 'Коммерческий';
+  }
+}
+
+// Функция добавления типа запроса к результатам
+function addQueryTypeToResults(results) {
+  // Получаем уникальные запросы
+  const uniqueQueries = [...new Set(results.map(r => r.query))];
+  
+  // Создаем карту типов запросов
+  const queryTypeMap = {};
+  uniqueQueries.forEach(query => {
+    queryTypeMap[query] = determineQueryType(results, query);
+  });
+  
+  // Добавляем тип запроса к каждому результату
+  return results.map(result => ({
+    ...result,
+    queryType: queryTypeMap[result.query]
+  }));
+}
+
 // Функция сохранения промежуточных результатов
 async function saveIntermediateResults(results, incompleteQueries) {
   try {
     // Сохраняем результаты
     if (results.length > 0) {
       const resultsFilename = getUniqueFilename('results/results_intermediate.csv');
-      await saveToCSV(results, resultsFilename);
+      // Добавляем тип запроса к промежуточным результатам
+      const resultsWithQueryType = addQueryTypeToResults(results);
+      await saveToCSV(resultsWithQueryType, resultsFilename);
       console.log(`\n💾 Промежуточные результаты сохранены: ${resultsFilename}`);
       console.log(`   Сохранено результатов: ${results.length}`);
     }
@@ -412,8 +457,11 @@ async function parseYandexSearch() {
     // Генерируем уникальное имя файла для результатов
     const resultsFilename = getUniqueFilename('results/results.csv');
     
+    // Добавляем тип запроса к результатам перед сохранением
+    const resultsWithQueryType = addQueryTypeToResults(results);
+    
     // Сохраняем результаты в CSV
-    await saveToCSV(results, resultsFilename);
+    await saveToCSV(resultsWithQueryType, resultsFilename);
     console.log(`\n✓ Парсинг завершен! Результаты сохранены в: ${resultsFilename}`);
     console.log(`  Режим работы: ${mode === MODES.COOKIE ? '🍪 С куками' : '🕶️  Инкогнито'}`);
     console.log(`  Всего обработано запросов: ${queries.length}`);
@@ -561,13 +609,7 @@ async function searchQuery(page, query) {
         '/kursfinder',
         '/actions',
         'jetinfo.ru',
-        'xakep.ru',
-        'vc.ru',
-        'ru.hostings.info',
-        'pro-hosting.online',
-        'hostradar.ru',
-        'ru.tophosts.net',
-        'dtf.ru'
+        'xakep.ru'
       ];
 
       // Проверяем наличие информационных паттернов
@@ -615,36 +657,41 @@ async function searchQuery(page, query) {
     const resultItems = document.querySelectorAll('.serp-item[data-cid]');
 
     let position = 1;
+    let organicPosition = 0; // Счетчик только для органических результатов
 
     resultItems.forEach((item) => {
       // Проверяем, что это не реклама
       const isAd = item.querySelector('.label_theme_direct, .ExtendedSerpItem-Label') !== null;
 
-      if (!isAd) {
-        // Извлекаем URL
-        const linkElement = item.querySelector('.OrganicTitle-Link, .Link.organic__url');
-        const url = linkElement ? linkElement.href : '';
+      // Извлекаем URL
+      const linkElement = item.querySelector('.OrganicTitle-Link, .Link.organic__url');
+      const url = linkElement ? linkElement.href : '';
 
-        // Извлекаем заголовок
-        const title = linkElement ? linkElement.textContent.trim() : '';
+      // Извлекаем заголовок
+      const title = linkElement ? linkElement.textContent.trim() : '';
 
-        if (url && title) {
-          // Определяем тип ссылки
-          const linkType = url.includes('yabs.yandex.ru') ? 'Реклама' : 'Органика';
+      if (url && title) {
+        // Определяем тип ссылки
+        const linkType = url.includes('yabs.yandex.ru') || isAd ? 'Реклама' : 'Органика';
 
-          // Определяем тип страницы
-          const pageType = determinePageType(url);
-
-          organicResults.push({
-            query: searchQuery,
-            position: position,
-            type: linkType,
-            pageType: pageType,
-            title: title,
-            url: url
-          });
-          position++;
+        // Увеличиваем счетчик органической позиции только для органики
+        if (linkType === 'Органика') {
+          organicPosition++;
         }
+
+        // Определяем тип страницы
+        const pageType = determinePageType(url);
+
+        organicResults.push({
+          query: searchQuery,
+          position: position,
+          organicPosition: linkType === 'Органика' ? organicPosition : null,
+          type: linkType,
+          pageType: pageType,
+          title: title,
+          url: url
+        });
+        position++;
       }
     });
 
@@ -692,13 +739,15 @@ async function readCookies(filename) {
 // Сохранение результатов в CSV
 async function saveToCSV(results, filename) {
   // Заголовок CSV
-  const header = 'Запрос,Позиция,Тип,Тип страницы,Заголовок,URL\n';
+  const header = 'Запрос,Тип запроса,Позиция,Поз.Органика,Тип,Тип страницы,Заголовок,URL\n';
 
   // Формируем строки CSV
   const rows = results.map(result => {
     return [
       escapeCSV(result.query),
+      escapeCSV(result.queryType || 'Неопределенный'),
       result.position,
+      result.organicPosition !== null ? result.organicPosition : '-',
       escapeCSV(result.type),
       escapeCSV(result.pageType),
       escapeCSV(result.title),
