@@ -2,3 +2,4 @@ node_modules
 **/Results/
 **/requests.txt/
 ***/queries.txt/
+*.env

@@ -1,0 +1,30 @@
+{
+  "name": "wordstat-parser-v2",
+  "version": "2.0.0",
+  "description": "Улучшенный парсер Яндекс.Вордстат с модульной архитектурой",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "clear-state": "node scripts/clearState.js",
+    "clear-results": "node scripts/clearResults.js"
+  },
+  "keywords": [
+    "wordstat",
+    "parser",
+    "yandex",
+    "puppeteer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "puppeteer-extra": "^3.3.6",
+    "puppeteer-extra-plugin-stealth": "^2.11.2",
+    "csv-writer": "^1.6.0",
+    "dotenv": "^16.3.1"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}
