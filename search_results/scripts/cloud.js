@@ -1,5 +1,5 @@
 import puppeteer from 'puppeteer';
-import { readFile, writeFile, access } from 'fs/promises';
+import { readFile, writeFile, access, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import readline from 'readline';
 import path from 'path';
@@ -7,6 +7,19 @@ import path from 'path';
 // Глобальная переменная для управления паузой
 let isPaused = false;
 let pauseMessage = '';
+
+// Функция проверки и создания папки
+async function ensureDirectoryExists(dirPath) {
+  try {
+    if (!existsSync(dirPath)) {
+      await mkdir(dirPath, { recursive: true });
+      console.log(`✓ Создана папка: ${dirPath}`);
+    }
+  } catch (error) {
+    console.error(`Ошибка при создании папки ${dirPath}:`, error.message);
+    throw error;
+  }
+}
 
 // Конфигурация браузера
 const CONFIG = {
@@ -295,6 +308,10 @@ function getUniqueFilename(filename) {
 // Функция сохранения запросов с недостаточными результатами
 async function saveIncompleteQueries(queries, filename) {
   try {
+    // Проверяем и создаем папку results если нужно
+    const dir = path.dirname(filename);
+    await ensureDirectoryExists(dir);
+    
     const uniqueFilename = getUniqueFilename(filename);
     const content = queries.join('\n');
     await writeFile(uniqueFilename, content, 'utf-8');
@@ -335,6 +352,10 @@ async function parseYandexSearch() {
   try {
     // Инициализируем горячие клавиши ПЕРЕД выбором режима
     initializeHotkeys();
+
+    // Проверяем и создаем необходимые папки
+    await ensureDirectoryExists('results');
+    await ensureDirectoryExists('scripts');
 
     // Выбор режима работы
     mode = await selectMode();
@@ -609,7 +630,15 @@ async function searchQuery(page, query) {
         '/kursfinder',
         '/actions',
         'jetinfo.ru',
-        'xakep.ru'
+        'xakep.ru',
+        'xakep.ru',
+        'vc.ru',
+        'ru.hostings.info',
+        'pro-hosting.online',
+        'hostradar.ru',
+        'ru.tophosts.net',
+        'dtf.ru',
+        'medium.com'
       ];
 
       // Проверяем наличие информационных паттернов
@@ -738,28 +767,37 @@ async function readCookies(filename) {
 
 // Сохранение результатов в CSV
 async function saveToCSV(results, filename) {
-  // Заголовок CSV
-  const header = 'Запрос,Тип запроса,Позиция,Поз.Органика,Тип,Тип страницы,Заголовок,URL\n';
+  try {
+    // Проверяем и создаем папку results если нужно
+    const dir = path.dirname(filename);
+    await ensureDirectoryExists(dir);
+    
+    // Заголовок CSV
+    const header = 'Запрос,Тип запроса,Позиция,Поз.Органика,Тип,Тип страницы,Заголовок,URL\n';
 
-  // Формируем строки CSV
-  const rows = results.map(result => {
-    return [
-      escapeCSV(result.query),
-      escapeCSV(result.queryType || 'Неопределенный'),
-      result.position,
-      result.organicPosition !== null ? result.organicPosition : '-',
-      escapeCSV(result.type),
-      escapeCSV(result.pageType),
-      escapeCSV(result.title),
-      escapeCSV(result.url)
-    ].join(',');
-  }).join('\n');
+    // Формируем строки CSV
+    const rows = results.map(result => {
+      return [
+        escapeCSV(result.query),
+        escapeCSV(result.queryType || 'Неопределенный'),
+        result.position,
+        result.organicPosition !== null ? result.organicPosition : '-',
+        escapeCSV(result.type),
+        escapeCSV(result.pageType),
+        escapeCSV(result.title),
+        escapeCSV(result.url)
+      ].join(',');
+    }).join('\n');
 
-  // Добавляем BOM для корректного отображения кириллицы в Excel
-  const bom = '\uFEFF';
-  const csvContent = bom + header + rows;
+    // Добавляем BOM для корректного отображения кириллицы в Excel
+    const bom = '\uFEFF';
+    const csvContent = bom + header + rows;
 
-  await writeFile(filename, csvContent, 'utf-8');
+    await writeFile(filename, csvContent, 'utf-8');
+  } catch (error) {
+    console.error('Ошибка при сохранении CSV:', error.message);
+    throw error;
+  }
 }
 
 // Экранирование значений для CSV
