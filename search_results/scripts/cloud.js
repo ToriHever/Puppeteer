@@ -638,7 +638,8 @@ async function searchQuery(page, query) {
         'hostradar.ru',
         'ru.tophosts.net',
         'dtf.ru',
-        'medium.com'
+        'medium.com',
+        '/press-centr'
       ];
 
       // Проверяем наличие информационных паттернов
