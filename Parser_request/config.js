@@ -38,7 +38,7 @@ export const CONFIG = {
 
   // Настройки браузера
   browser: {
-    viewport: { width: 1035, height: 520 },
+    viewport: { width: 1920, height: 1080},
     headless: false,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
   },
