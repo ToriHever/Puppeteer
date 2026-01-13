@@ -13,7 +13,8 @@ import {
   normalizeQueryKey,
   hasAllMetrics,
   formatProgress,
-  retryWithBackoff
+  retryWithBackoff,
+  formatTime
 } from './utils.js';
 
 puppeteer.use(StealthPlugin());
@@ -30,6 +31,8 @@ export class WordstatParser {
     this.csvWriter = null;
     this.isPaused = false;
     this.tasks = [];
+    this.startTime = null;
+    this.processedCount = 0;
   }
 
   /**
@@ -89,58 +92,116 @@ export class WordstatParser {
           right: 10px;
           z-index: 99999;
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-          padding: 15px;
-          border-radius: 10px;
+          padding: 20px;
+          border-radius: 12px;
           font-family: 'Segoe UI', sans-serif;
-          box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+          box-shadow: 0 8px 32px rgba(0,0,0,0.3);
           color: white;
-          min-width: 200px;
+          min-width: 280px;
+          backdrop-filter: blur(10px);
         `;
 
         const title = document.createElement('div');
         title.textContent = '🤖 Parser Control';
-        title.style.cssText = 'font-weight: bold; margin-bottom: 10px; font-size: 14px;';
+        title.style.cssText = `
+          font-weight: bold; 
+          margin-bottom: 15px; 
+          font-size: 16px;
+          text-align: center;
+          letter-spacing: 1px;
+        `;
         panel.appendChild(title);
 
         const status = document.createElement('div');
         status.id = 'parser-status';
-        status.style.cssText = 'margin-bottom: 10px; font-size: 12px;';
-        status.textContent = 'Status: Running';
+        status.style.cssText = `
+          background: rgba(255,255,255,0.15);
+          padding: 12px;
+          border-radius: 8px;
+          margin-bottom: 12px;
+          font-size: 13px;
+          line-height: 1.6;
+        `;
+        status.innerHTML = `
+          <div><strong>Статус:</strong> <span id="status-text">Загрузка...</span></div>
+          <div><strong>Прогресс:</strong> <span id="progress-text">0/0 (0%)</span></div>
+          <div><strong>Время:</strong> <span id="time-text">--:--:--</span></div>
+          <div><strong>Осталось:</strong> <span id="eta-text">Расчёт...</span></div>
+        `;
         panel.appendChild(status);
 
-        const createButton = (text, callback) => {
+        const progressBar = document.createElement('div');
+        progressBar.style.cssText = `
+          background: rgba(255,255,255,0.2);
+          height: 8px;
+          border-radius: 4px;
+          margin-bottom: 15px;
+          overflow: hidden;
+        `;
+        const progressFill = document.createElement('div');
+        progressFill.id = 'progress-fill';
+        progressFill.style.cssText = `
+          background: linear-gradient(90deg, #4ade80, #22c55e);
+          height: 100%;
+          width: 0%;
+          transition: width 0.3s ease;
+          border-radius: 4px;
+        `;
+        progressBar.appendChild(progressFill);
+        panel.appendChild(progressBar);
+
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = 'display: flex; gap: 8px;';
+
+        const createButton = (text, callback, color = 'white') => {
           const btn = document.createElement('button');
           btn.textContent = text;
           btn.style.cssText = `
-            margin: 5px 5px 0 0;
-            padding: 8px 15px;
-            background: white;
+            flex: 1;
+            padding: 10px 15px;
+            background: ${color};
             color: #667eea;
             border: none;
-            border-radius: 5px;
+            border-radius: 6px;
             cursor: pointer;
             font-weight: bold;
-            font-size: 12px;
+            font-size: 13px;
             transition: all 0.3s;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
           `;
-          btn.onmouseover = () => btn.style.transform = 'scale(1.05)';
-          btn.onmouseout = () => btn.style.transform = 'scale(1)';
+          btn.onmouseover = () => {
+            btn.style.transform = 'translateY(-2px)';
+            btn.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+          };
+          btn.onmouseout = () => {
+            btn.style.transform = 'translateY(0)';
+            btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+          };
           btn.onclick = callback;
           return btn;
         };
 
-        panel.appendChild(createButton('⏸ Pause', () => window.pauseParser()));
-        panel.appendChild(createButton('▶️ Resume', () => window.resumeParser()));
+        buttonContainer.appendChild(createButton('⏸ Пауза', () => window.pauseParser()));
+        buttonContainer.appendChild(createButton('▶️ Старт', () => window.resumeParser()));
+        panel.appendChild(buttonContainer);
 
         document.body.appendChild(panel);
 
-        // Обновление статуса каждые 2 секунды
+        // Обновление статуса каждые 1 секунду
         setInterval(async () => {
-          const statusInfo = await window.getParserStatus();
-          if (statusInfo) {
-            status.textContent = `Status: ${statusInfo}`;
+          try {
+            const statusInfo = await window.getParserStatus();
+            if (statusInfo) {
+              document.getElementById('status-text').textContent = statusInfo.status;
+              document.getElementById('progress-text').textContent = statusInfo.progress;
+              document.getElementById('time-text').textContent = statusInfo.elapsed;
+              document.getElementById('eta-text').textContent = statusInfo.eta;
+              document.getElementById('progress-fill').style.width = statusInfo.percentage + '%';
+            }
+          } catch (e) {
+            console.error('Ошибка обновления статуса:', e);
           }
-        }, 2000);
+        }, 1000);
       });
     });
   }
@@ -165,6 +226,22 @@ export class WordstatParser {
   }
 
   /**
+   * Расчёт оставшегося времени
+   */
+  calculateETA() {
+    if (!this.startTime || this.processedCount === 0) {
+      return 'Расчёт...';
+    }
+
+    const elapsed = Date.now() - this.startTime;
+    const avgTimePerTask = elapsed / this.processedCount;
+    const remaining = this.tasks.length - this.processedCount;
+    const etaMs = avgTimePerTask * remaining;
+
+    return formatTime(etaMs);
+  }
+
+  /**
    * Парсинг одного запроса
    */
   async parseQuery(task) {
@@ -175,6 +252,7 @@ export class WordstatParser {
     // Проверяем, не обработана ли уже эта задача
     if (this.stateManager.isTaskProcessed(taskId)) {
       logger.debug(`Задача уже обработана, пропускаем: ${taskId}`);
+      this.processedCount++;
       return;
     }
 
@@ -235,8 +313,10 @@ export class WordstatParser {
           frequencyWithQuotes: result.withQuotes,
           frequencyWithExclamation: result.withExclamation
         }]);
-        logger.success(`✓ Запрос завершен: ${key}`);
+        logger.success(`✓ Запрос завершён: ${key}`);
       }
+
+      this.processedCount++;
 
     }, { query, type });
   }
@@ -247,8 +327,10 @@ export class WordstatParser {
   async parse() {
     logger.info('Начинаем парсинг...');
     
+    this.startTime = Date.now();
     const totalTasks = this.tasks.length;
     const startIndex = this.stateManager.state.currentIndex;
+    this.processedCount = startIndex;
 
     for (let i = startIndex; i < totalTasks; i++) {
       // Проверка паузы
@@ -311,9 +393,20 @@ export class WordstatParser {
    * Получение статуса
    */
   getStatus() {
-    const stats = this.stateManager.getStats();
-    const status = this.isPaused ? 'Paused' : 'Running';
-    return `${status} | Processed: ${stats.processedTasks}`;
+    const status = this.isPaused ? 'Пауза' : 'Работает';
+    const total = this.tasks.length;
+    const current = this.processedCount;
+    const percentage = total > 0 ? ((current / total) * 100).toFixed(1) : 0;
+    const elapsed = this.startTime ? Date.now() - this.startTime : 0;
+    const eta = this.calculateETA();
+
+    return {
+      status,
+      progress: `${current}/${total} (${percentage}%)`,
+      percentage,
+      elapsed: formatTime(elapsed),
+      eta
+    };
   }
 
   /**

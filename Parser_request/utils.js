@@ -102,6 +102,22 @@ function createProgressBar(current, total, width = 30) {
 }
 
 /**
+ * Форматирование времени в читаемый вид
+ * @param {number} ms - Время в миллисекундах
+ * @returns {string} Отформатированное время (чч:мм:сс)
+ */
+export function formatTime(ms) {
+  if (!ms || ms < 0) return '--:--:--';
+  
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+}
+
+/**
  * Безопасное чтение JSON файла
  */
 export function readJsonFile(filePath, defaultValue = null) {

@@ -6,7 +6,7 @@ export LANG=en_US.UTF-8
 # Определяем базовый путь с учетом пользователя
 BASE_PATH="$HOME/Desktop/Puppeteer/Parser_request"
 REQUESTS_FILE="$BASE_PATH/requests.txt"
-SCRIPT_FILE="$BASE_PATH/wordstat-parser-ctrlV.js"
+SCRIPT_FILE="$BASE_PATH/index.js"
 
 # Проверяем существование файла requests.txt
 if [ -f "$REQUESTS_FILE" ]; then
