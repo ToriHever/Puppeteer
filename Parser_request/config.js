@@ -38,9 +38,14 @@ export const CONFIG = {
 
   // Настройки браузера
   browser: {
-    viewport: { width: 1920, height: 1080},
+    viewport: null, // null = использовать размер окна браузера
     headless: false,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: [
+      '--no-sandbox', 
+      '--disable-setuid-sandbox',
+      '--start-maximized' // Открывает браузер на весь экран
+    ],
+    defaultViewport: null // null = отключает фиксированный viewport
   },
 
   // Таймауты и задержки
