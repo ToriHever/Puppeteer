@@ -29,8 +29,6 @@ class GoogleParser extends BaseParser {
       timeout: 30000
     });
 
-    // Небольшая задержка после загрузки страницы
-    await sleep(1000 + Math.random() * 1000);
 
     // Делаем несколько случайных движений мыши по странице
     const viewport = page.viewport();
