@@ -6,9 +6,12 @@ export LANG=en_US.UTF-8
 # Определяем путь к корню проекта (на уровень выше от текущего скрипта)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PARSER_PATH="$(dirname "$SCRIPT_DIR")"
+# Главная папка Puppeteer (на уровень выше multi_search_parser)
+PUPPETEER_PATH="$(dirname "$PARSER_PATH")"
 SCRIPTS_PATH="$PARSER_PATH/scripts"
 QUERIES_FILE="$SCRIPTS_PATH/queries.txt"
 MAIN_SCRIPT="$PARSER_PATH/index.js"
+NODE_MODULES_PATH="$PUPPETEER_PATH/node_modules"
 
 # Цветной вывод
 RED='\033[0;31m'
@@ -49,6 +52,7 @@ print_header "MULTI-SEARCH PARSER (Yandex & Google)"
 
 echo "📍 Расположение скрипта: $SCRIPT_DIR"
 echo "📁 Корень проекта: $PARSER_PATH"
+echo "📦 Папка Puppeteer: $PUPPETEER_PATH"
 echo ""
 
 # Проверяем существование основной директории
@@ -178,8 +182,8 @@ echo "🚀 Главный скрипт: index.js"
 echo ""
 
 # Проверяем установку зависимостей
-if [ ! -d "$PARSER_PATH/node_modules" ]; then
-    print_warning "Node modules не найдены"
+if [ ! -d "$NODE_MODULES_PATH" ]; then
+    print_warning "Node modules не найдены в: $NODE_MODULES_PATH"
     echo ""
     echo "Необходимо установить зависимости. Установить сейчас? (y/n)"
     read -p "Выбор: " INSTALL_CHOICE
@@ -187,11 +191,11 @@ if [ ! -d "$PARSER_PATH/node_modules" ]; then
     if [ "$INSTALL_CHOICE" = "y" ] || [ "$INSTALL_CHOICE" = "Y" ]; then
         echo ""
         print_header "Установка зависимостей"
-        cd "$PARSER_PATH" || exit 1
+        cd "$PUPPETEER_PATH" || exit 1
         npm install
         
         if [ $? -eq 0 ]; then
-            print_success "Зависимости установлены"
+            print_success "Зависимости установлены в: $NODE_MODULES_PATH"
         else
             print_error "Ошибка при установке зависимостей"
             read -p "Нажмите Enter для выхода..."
@@ -202,6 +206,8 @@ if [ ! -d "$PARSER_PATH/node_modules" ]; then
         read -p "Нажмите Enter для выхода..."
         exit 1
     fi
+else
+    print_success "Node modules найдены: $NODE_MODULES_PATH"
 fi
 
 # Переходим в директорию проекта
