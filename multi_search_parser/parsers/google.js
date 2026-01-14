@@ -65,7 +65,7 @@ class GoogleParser extends BaseParser {
           '/story', '/stories', '/review', '/reviews', '/info', '/informacia',
           '/stati', '/statya', '/novosti', '/obzor', '/analytics', '/support',
           '/docs', '/links', '/opinions', '/technology', '/technologies',
-          'wikipedia.org', 'habr.com', 'medium.com', 'reddit.com'
+          'wikipedia.org', 'habr.com', 'medium.com', 'reddit.com', '/images'
         ];
 
         const isInfo = infoPatterns.some(pattern => lowerUrl.includes(pattern));

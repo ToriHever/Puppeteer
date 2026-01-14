@@ -58,7 +58,7 @@ export default class YandexParser extends BaseParser {
           '/docs', '/links', '/opinions', '/technology', '/technologies',
           '/kursfinder', '/actions', 'jetinfo.ru', 'xakep.ru', 'vc.ru',
           'ru.hostings.info', 'pro-hosting.online', 'hostradar.ru',
-          'ru.tophosts.net', 'dtf.ru', 'medium.com', '/press-centr'
+          'ru.tophosts.net', 'dtf.ru', 'medium.com', '/press-centr', '/images'
         ];
 
         const isInfo = infoPatterns.some(pattern => lowerUrl.includes(pattern));
