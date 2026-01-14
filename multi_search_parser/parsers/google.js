@@ -1,5 +1,6 @@
 import BaseParser from './base.js';
 import { sleep } from '../utils/helpers.js';
+import { INFO_PATTERNS, COMMERCE_PATTERNS } from '../utils/pageClassifier.js';
 
 class GoogleParser extends BaseParser {
   constructor() {
@@ -51,36 +52,19 @@ class GoogleParser extends BaseParser {
     await sleep(1000);
 
     // Извлекаем органические результаты
-    const results = await page.evaluate((searchQuery) => {
+    const results = await page.evaluate((searchQuery, infoPatterns, commercePatterns) => {
       
       // Функция определения типа страницы
       function determinePageType(url) {
+        if (!url) return 'Непонятная';
         const lowerUrl = url.toLowerCase();
-
-        // Паттерны для информационных страниц
-        const infoPatterns = [
-          '/blog', '/article', '/articles', '/news', '/help', '/faq', '/guide',
-          '/tutorial', '/wiki', '/knowledge', '/learn', 'education', '/tips',
-          '/advice', '/howto', '/how-to', 'id=', '?p=', '/post', '/posts',
-          '/story', '/stories', '/review', '/reviews', '/info', '/informacia',
-          '/stati', '/statya', '/novosti', '/obzor', '/analytics', '/support',
-          '/docs', '/links', '/opinions', '/technology', '/technologies',
-          'wikipedia.org', 'habr.com', 'medium.com', 'reddit.com', '/images'
-        ];
-
+        
         const isInfo = infoPatterns.some(pattern => lowerUrl.includes(pattern));
         if (isInfo) return 'Информационная';
-
-        // Паттерны для коммерческих страниц
-        const commercePatterns = [
-          '/shop', '/store', '/buy', '/product', '/catalog', '/cart',
-          '/checkout', '/order', '/purchase', '/price', '/kupit', '/magazin',
-          '/tovar', '/katalog', '/services', '/solutions', '/pricing'
-        ];
-
+        
         const isCommerce = commercePatterns.some(pattern => lowerUrl.includes(pattern));
         if (isCommerce) return 'Коммерческая';
-
+        
         return 'Непонятная';
       }
       
@@ -171,7 +155,7 @@ class GoogleParser extends BaseParser {
       });
 
       return organicResults;
-    }, query);
+    }, query, INFO_PATTERNS, COMMERCE_PATTERNS);
 
     console.log(`  [${this.name}] 📊 Найдено ${results.length} результатов`);
     

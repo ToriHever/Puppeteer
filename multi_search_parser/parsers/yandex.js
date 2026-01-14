@@ -1,7 +1,8 @@
 import BaseParser from './base.js';
 import { sleep } from '../utils/helpers.js';
+import { INFO_PATTERNS, COMMERCE_PATTERNS } from '../utils/pageClassifier.js';
 
-export default class YandexParser extends BaseParser {
+class YandexParser extends BaseParser {
   constructor() {
     super('yandex');
   }
@@ -42,38 +43,19 @@ export default class YandexParser extends BaseParser {
     await page.waitForSelector('.serp-item, .OrganicTitle', { timeout: 10000 }).catch(() => {});
 
     // Извлекаем органические результаты
-    const results = await page.evaluate((searchQuery) => {
+    const results = await page.evaluate((searchQuery, infoPatterns, commercePatterns) => {
       
       // Функция определения типа страницы
       function determinePageType(url) {
+        if (!url) return 'Непонятная';
         const lowerUrl = url.toLowerCase();
-
-        // Паттерны для информационных страниц
-        const infoPatterns = [
-          '/blog', '/article', '/articles', '/news', '/help', '/faq', '/guide',
-          '/tutorial', '/wiki', '/knowledge', '/learn', 'education', '/tips',
-          '/advice', '/howto', '/how-to', 'id=', '?p=', '/post', '/posts',
-          '/story', '/stories', '/review', '/reviews', '/info', '/informacia',
-          '/stati', '/statya', '/novosti', '/obzor', '/analytics', '/support',
-          '/docs', '/links', '/opinions', '/technology', '/technologies',
-          '/kursfinder', '/actions', 'jetinfo.ru', 'xakep.ru', 'vc.ru',
-          'ru.hostings.info', 'pro-hosting.online', 'hostradar.ru',
-          'ru.tophosts.net', 'dtf.ru', 'medium.com', '/press-centr', '/images'
-        ];
-
+        
         const isInfo = infoPatterns.some(pattern => lowerUrl.includes(pattern));
         if (isInfo) return 'Информационная';
-
-        // Паттерны для коммерческих страниц
-        const commercePatterns = [
-          '/shop', '/store', '/buy', '/product', '/catalog', '/cart',
-          '/checkout', '/order', '/purchase', '/price', '/kupit', '/magazin',
-          '/tovar', '/katalog', '/services', '/solutions', '/pricing', '/', '/protection'
-        ];
-
+        
         const isCommerce = commercePatterns.some(pattern => lowerUrl.includes(pattern));
         if (isCommerce) return 'Коммерческая';
-
+        
         return 'Непонятная';
       }
       
@@ -112,9 +94,11 @@ export default class YandexParser extends BaseParser {
       });
 
       return organicResults;
-    }, query);
+    }, query, INFO_PATTERNS, COMMERCE_PATTERNS);
 
     console.log(`  [${this.name}] 📊 Найдено ${results.length} результатов`);
     return results;
   }
 }
+
+export default YandexParser;
