@@ -1,0 +1,391 @@
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import axios from 'axios';
+import { createObjectCsvWriter } from 'csv-writer';
+import chalk from 'chalk';
+import delay from 'delay';
+import dotenv from 'dotenv';
+import readline from 'readline';
+
+// Получаем текущую директорию для ES модулей
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Загрузка переменных окружения из корневой папки
+const envPath = path.join(__dirname, '..', '.env');
+dotenv.config({ path: envPath });
+
+const API_TOKEN = process.env.WORDSTAT_API_TOKEN;
+// Правильный URL для нового Wordstat API
+const API_URL = 'https://api.wordstat.yandex.net/v1/dynamics';
+
+// Проверка наличия токена
+if (!API_TOKEN) {
+  console.error(chalk.red('❌ Ошибка: WORDSTAT_API_TOKEN не найден в .env файле'));
+  console.log(chalk.yellow('\nДля начала работы:'));
+  console.log(chalk.white('1. Создайте файл .env в корневой папке проекта'));
+  console.log(chalk.white('2. Добавьте строку: WORDSTAT_API_TOKEN=ваш_токен'));
+  console.log(chalk.white('3. Получите токен на: https://oauth.yandex.ru/'));
+  process.exit(1);
+}
+
+// Пути к файлам
+const REQUEST_FILE = path.join(__dirname, 'requests.txt');
+const RESULT_DIR = path.join(__dirname, 'Result');
+
+// Создание директории для результатов
+if (!fs.existsSync(RESULT_DIR)) {
+  fs.mkdirSync(RESULT_DIR, { recursive: true });
+}
+
+/**
+ * Интерфейс для ввода данных
+ */
+const rl = readline.createInterface({
+  input: process.stdin,
+  output: process.stdout
+});
+
+/**
+ * Функция для получения ввода пользователя
+ */
+function question(query) {
+  return new Promise(resolve => rl.question(query, resolve));
+}
+
+/**
+ * Валидация даты
+ */
+function isValidDate(dateString) {
+  const regex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!regex.test(dateString)) return false;
+  
+  const date = new Date(dateString);
+  return date instanceof Date && !isNaN(date);
+}
+
+/**
+ * Интерактивный выбор периода
+ */
+async function selectPeriod() {
+  console.log(chalk.cyan('\n' + '='.repeat(60)));
+  console.log(chalk.cyan('  📅 Выбор периода для получения статистики'));
+  console.log(chalk.cyan('='.repeat(60) + '\n'));
+
+  console.log(chalk.white('Доступные варианты:'));
+  console.log(chalk.yellow('  1') + chalk.white(' - 2024 год (с 2024-01-01 по 2024-12-31)'));
+  console.log(chalk.yellow('  2') + chalk.white(' - 2025 год (с 2025-01-01 по 2025-12-31)'));
+  console.log(chalk.yellow('  3') + chalk.white(' - Последние 12 месяцев'));
+  console.log(chalk.yellow('  4') + chalk.white(' - Свой период (ввести даты вручную)\n'));
+
+  let choice = await question(chalk.green('Выберите вариант (1-4): '));
+  choice = choice.trim();
+
+  let fromDate, toDate, periodName;
+
+  switch (choice) {
+    case '1':
+      fromDate = '2024-01-01';
+      toDate = '2024-12-31';
+      periodName = '2024 год';
+      break;
+
+    case '2':
+      fromDate = '2025-01-01';
+      toDate = '2025-12-31';
+      periodName = '2025 год';
+      break;
+
+    case '3':
+      const today = new Date();
+      const lastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const twelveMonthsAgo = new Date(lastMonth.getFullYear(), lastMonth.getMonth() - 11, 1);
+      
+      fromDate = twelveMonthsAgo.toISOString().split('T')[0];
+      toDate = new Date(lastMonth.getFullYear(), lastMonth.getMonth() + 1, 0).toISOString().split('T')[0];
+      periodName = 'Последние 12 месяцев';
+      break;
+
+    case '4':
+      console.log(chalk.yellow('\n📝 Введите даты в формате YYYY-MM-DD (например, 2024-01-01)\n'));
+      
+      while (true) {
+        fromDate = await question(chalk.green('Дата начала (fromDate): '));
+        fromDate = fromDate.trim();
+        
+        if (isValidDate(fromDate)) {
+          break;
+        } else {
+          console.log(chalk.red('❌ Неверный формат даты. Используйте формат YYYY-MM-DD'));
+        }
+      }
+
+      while (true) {
+        toDate = await question(chalk.green('Дата окончания (toDate): '));
+        toDate = toDate.trim();
+        
+        if (isValidDate(toDate)) {
+          if (new Date(toDate) >= new Date(fromDate)) {
+            break;
+          } else {
+            console.log(chalk.red('❌ Дата окончания должна быть больше или равна дате начала'));
+          }
+        } else {
+          console.log(chalk.red('❌ Неверный формат даты. Используйте формат YYYY-MM-DD'));
+        }
+      }
+
+      periodName = `Период с ${fromDate} по ${toDate}`;
+      break;
+
+    default:
+      console.log(chalk.red('\n❌ Неверный выбор. Используется 2025 год по умолчанию.\n'));
+      fromDate = '2025-01-01';
+      toDate = '2025-12-31';
+      periodName = '2025 год (по умолчанию)';
+  }
+
+  console.log(chalk.green(`\n✓ Выбран период: ${periodName}`));
+  console.log(chalk.gray(`  От: ${fromDate}`));
+  console.log(chalk.gray(`  До: ${toDate}\n`));
+
+  return { fromDate, toDate, periodName };
+}
+
+/**
+ * Чтение списка запросов из файла
+ */
+function readRequests() {
+  try {
+    if (!fs.existsSync(REQUEST_FILE)) {
+      console.error(chalk.red(`❌ Файл ${REQUEST_FILE} не найден`));
+      console.log(chalk.yellow('\nСоздайте файл Parser_wordstat_api/requests.txt'));
+      console.log(chalk.white('И добавьте запросы (каждый с новой строки)'));
+      return [];
+    }
+
+    const content = fs.readFileSync(REQUEST_FILE, 'utf-8');
+    const requests = content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    if (requests.length === 0) {
+      console.log(chalk.yellow('⚠️  Файл requests.txt пуст'));
+      console.log(chalk.white('Добавьте запросы в файл Parser_wordstat_api/requests.txt'));
+    }
+
+    return requests;
+  } catch (error) {
+    console.error(chalk.red(`❌ Ошибка чтения файла ${REQUEST_FILE}:`), error.message);
+    return [];
+  }
+}
+
+/**
+ * Получение динамики для запроса за указанный период
+ */
+async function getWordstatDynamics(phrase, fromDate, toDate, index, total) {
+  const requestBody = {
+    phrase: phrase,
+    period: 'monthly',
+    fromDate: fromDate,
+    toDate: toDate
+  };
+
+  try {
+    const response = await axios.post(API_URL, requestBody, {
+      headers: {
+        'Content-Type': 'application/json;charset=utf-8',
+        'Authorization': `Bearer ${API_TOKEN}`
+      }
+    });
+
+    if (response.data && response.data.dynamics) {
+      const dynamics = response.data.dynamics;
+      
+      // Преобразуем массив dynamics в объект с ключами по месяцам
+      const monthlyData = {};
+      let totalCount = 0;
+
+      dynamics.forEach(item => {
+        const date = new Date(item.date);
+        const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        monthlyData[monthKey] = item.count;
+        totalCount += item.count;
+      });
+
+      console.log(chalk.green(`✓ [${index}/${total}] "${phrase}" - ${totalCount.toLocaleString()} показов`));
+
+      return {
+        phrase,
+        monthlyData,
+        totalCount,
+        requestPhrase: response.data.requestPhrase,
+        success: true
+      };
+    }
+
+    console.log(chalk.yellow(`⚠️  [${index}/${total}] "${phrase}" - нет данных`));
+    return { phrase, success: false };
+  } catch (error) {
+    console.error(chalk.red(`❌ [${index}/${total}] "${phrase}" - ${error.response?.data?.message || error.message}`));
+    return { phrase, success: false, error: error.message };
+  }
+}
+
+/**
+ * Обработка запросов пакетами (до 10 одновременно)
+ */
+async function processBatch(phrases, fromDate, toDate, startIndex) {
+  const batchPromises = phrases.map((phrase, i) => 
+    getWordstatDynamics(phrase, fromDate, toDate, startIndex + i + 1, startIndex + phrases.length)
+  );
+  
+  return await Promise.all(batchPromises);
+}
+
+/**
+ * Обработка всех запросов с ограничением 10 req/sec
+ */
+async function processAllRequests(requests, fromDate, toDate) {
+  const BATCH_SIZE = 10;
+  const results = [];
+  let successCount = 0;
+  let errorCount = 0;
+
+  console.log(chalk.cyan(`\n⚡ Режим быстрой обработки: до ${BATCH_SIZE} запросов одновременно\n`));
+
+  for (let i = 0; i < requests.length; i += BATCH_SIZE) {
+    const batch = requests.slice(i, i + BATCH_SIZE);
+    const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(requests.length / BATCH_SIZE);
+
+    console.log(chalk.blue(`\n📦 Пакет ${batchNumber}/${totalBatches} (${batch.length} запросов)...`));
+    
+    const startTime = Date.now();
+    const batchResults = await processBatch(batch, fromDate, toDate, i);
+    const endTime = Date.now();
+
+    // Обработка результатов пакета
+    batchResults.forEach(result => {
+      if (result.success && result.monthlyData) {
+        results.push({
+          query: result.phrase,
+          total: result.totalCount,
+          ...result.monthlyData
+        });
+        successCount++;
+      } else {
+        errorCount++;
+      }
+    });
+
+    // Показываем статистику пакета
+    const batchTime = ((endTime - startTime) / 1000).toFixed(2);
+    console.log(chalk.gray(`   Обработано за ${batchTime}с`));
+
+    // Задержка между пакетами (1 секунда)
+    if (i + BATCH_SIZE < requests.length) {
+      console.log(chalk.gray(`   ⏱️  Пауза 1 секунда перед следующим пакетом...`));
+      await delay(1000);
+    }
+  }
+
+  return { results, successCount, errorCount };
+}
+
+/**
+ * Основная функция
+ */
+async function main() {
+  console.log(chalk.cyan('\n' + '='.repeat(60)));
+  console.log(chalk.cyan('  📈 Wordstat API - Получение динамики запросов'));
+  console.log(chalk.cyan('='.repeat(60) + '\n'));
+
+  // Интерактивный выбор периода
+  const { fromDate, toDate, periodName } = await selectPeriod();
+
+  const RESULT_FILE = path.join(RESULT_DIR, `wordstat_${fromDate}_${toDate}.csv`);
+
+  console.log(chalk.gray(`API URL: ${API_URL}`));
+  console.log(chalk.gray(`Токен: ${API_TOKEN.substring(0, 10)}...${API_TOKEN.substring(API_TOKEN.length - 5)}`));
+  console.log(chalk.gray(`Метод авторизации: Bearer Token\n`));
+
+  const requests = readRequests();
+
+  if (requests.length === 0) {
+    rl.close();
+    return;
+  }
+
+  console.log(chalk.green(`✓ Найдено запросов: ${requests.length}\n`));
+
+  // Подтверждение запуска
+  const confirm = await question(chalk.yellow('Начать обработку? (y/n): '));
+  if (confirm.toLowerCase() !== 'y' && confirm.toLowerCase() !== 'yes' && confirm.toLowerCase() !== 'д') {
+    console.log(chalk.yellow('\n⚠️  Обработка отменена\n'));
+    rl.close();
+    return;
+  }
+
+  console.log('\n');
+
+  const startTime = Date.now();
+  const { results, successCount, errorCount } = await processAllRequests(requests, fromDate, toDate);
+  const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+
+  // Сохранение результатов в CSV
+  if (results.length > 0) {
+    // Получение всех уникальных месяцев
+    const allMonths = new Set();
+    results.forEach(row => {
+      Object.keys(row).forEach(key => {
+        if (key !== 'query' && key !== 'total') {
+          allMonths.add(key);
+        }
+      });
+    });
+
+    const sortedMonths = Array.from(allMonths).sort();
+
+    // Формирование заголовков CSV
+    const headers = [
+      { id: 'query', title: 'Запрос' },
+      { id: 'total', title: 'Всего за период' },
+      ...sortedMonths.map(month => ({ id: month, title: month }))
+    ];
+
+    const csvWriter = createObjectCsvWriter({
+      path: RESULT_FILE,
+      header: headers,
+      encoding: 'utf8'
+    });
+
+    await csvWriter.writeRecords(results);
+
+    console.log(chalk.cyan('='.repeat(60)));
+    console.log(chalk.green(`✅ Результаты сохранены в: ${RESULT_FILE}`));
+    console.log(chalk.green(`✅ Успешно обработано: ${successCount} запросов`));
+    if (errorCount > 0) {
+      console.log(chalk.yellow(`⚠️  Ошибок: ${errorCount} запросов`));
+    }
+    console.log(chalk.blue(`⏱️  Общее время: ${totalTime}с`));
+    console.log(chalk.gray(`   Средняя скорость: ${(requests.length / totalTime).toFixed(2)} запросов/сек`));
+    console.log(chalk.cyan('='.repeat(60) + '\n'));
+  } else {
+    console.log(chalk.yellow('\n⚠️  Нет данных для сохранения'));
+    console.log(chalk.red(`❌ Все запросы завершились с ошибкой\n`));
+  }
+
+  rl.close();
+}
+
+// Запуск скрипта
+main().catch(error => {
+  console.error(chalk.red('\n❌ Критическая ошибка:'), error);
+  console.error(error.stack);
+  rl.close();
+  process.exit(1);
+});
