@@ -37,6 +37,25 @@ function selectSearchEngine() {
   });
 }
 
+// Парсинг аргументов командной строки
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const engineArg = args.find(arg => arg.startsWith('--engine='));
+  
+  if (engineArg) {
+    const engine = engineArg.split('=')[1];
+    const mapping = {
+      'yandex': '1',
+      'google': '2',
+      'both-seq': '3',
+      'both-par': '4'
+    };
+    return mapping[engine];
+  }
+  
+  return null;
+}
+
 // Главная функция
 async function main() {
   let yandexParser;
@@ -65,8 +84,9 @@ async function main() {
     // Инициализируем горячие клавиши
     initializeHotkeys();
 
-    // Выбираем поисковую систему
-    const choice = await selectSearchEngine();
+    // Проверяем аргументы командной строки
+    const argChoice = parseArgs();
+    const choice = argChoice || await selectSearchEngine();
 
     switch(choice) {
       case '1':
