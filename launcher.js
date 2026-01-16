@@ -19,6 +19,13 @@ const PARSERS = {
     icon: '📊',
     color: 'cyan'
   },
+  'wordstat-api': {
+    name: 'Wordstat API Parser',
+    description: 'Получение динамики запросов через Wordstat API',
+    path: './Parser_wordstat_api/wordstat-api.js',
+    icon: '📈',
+    color: 'green'
+  },
   'multi-yandex': {
     name: 'Multi Search - Yandex',
     description: 'Парсинг результатов поиска Яндекс',
@@ -48,7 +55,7 @@ const PARSERS = {
     description: 'Парсинг Yandex и Google параллельно',
     path: './multi_search_parser/index.js',
     icon: '⚡',
-    color: 'green',
+    color: 'white',
     args: ['--engine', 'both-par']
   }
 };
@@ -126,6 +133,7 @@ class ParserLauncher {
   async openRequestsFile(parserKey) {
     const requestsFiles = {
       'wordstat': path.join(__dirname, 'Parser_request', 'requests.txt'),
+      'wordstat-api': path.join(__dirname, 'Parser_wordstat_api', 'requests.txt'),
       'multi-yandex': path.join(__dirname, 'multi_search_parser', 'scripts', 'queries.txt'),
       'multi-google': path.join(__dirname, 'multi_search_parser', 'scripts', 'queries.txt'),
       'multi-both-seq': path.join(__dirname, 'multi_search_parser', 'scripts', 'queries.txt'),
