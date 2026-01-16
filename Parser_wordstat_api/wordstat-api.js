@@ -66,6 +66,29 @@ function isValidDate(dateString) {
 }
 
 /**
+ * Выбор формата сохранения
+ */
+async function selectFormat() {
+  console.log(chalk.cyan('\n' + '='.repeat(60)));
+  console.log(chalk.cyan('  💾 Выбор формата сохранения данных'));
+  console.log(chalk.cyan('='.repeat(60) + '\n'));
+
+  console.log(chalk.white('Доступные форматы:'));
+  console.log(chalk.yellow('  1') + chalk.white(' - Перекрестная таблица (Запрос | Всего | 2024-01 | 2024-02 | ...)'));
+  console.log(chalk.yellow('  2') + chalk.white(' - Обычная таблица (Запрос | Месяц | Частота)\n'));
+
+  let choice = await question(chalk.green('Выберите формат (1-2): '));
+  choice = choice.trim();
+
+  const format = (choice === '2') ? 'normal' : 'pivot';
+  const formatName = (format === 'normal') ? 'Обычная таблица' : 'Перекрестная таблица';
+
+  console.log(chalk.green(`✓ Выбран формат: ${formatName}\n`));
+
+  return format;
+}
+
+/**
  * Интерактивный выбор периода
  */
 async function selectPeriod() {
@@ -307,7 +330,10 @@ async function main() {
   // Интерактивный выбор периода
   const { fromDate, toDate, periodName } = await selectPeriod();
 
-  const RESULT_FILE = path.join(RESULT_DIR, `wordstat_${fromDate}_${toDate}.csv`);
+  // Интерактивный выбор формата
+  const format = await selectFormat();
+
+  const RESULT_FILE = path.join(RESULT_DIR, `wordstat_${fromDate}_${toDate}_${format}.csv`);
 
   console.log(chalk.gray(`API URL: ${API_URL}`));
   console.log(chalk.gray(`Токен: ${API_TOKEN.substring(0, 10)}...${API_TOKEN.substring(API_TOKEN.length - 5)}`));
@@ -338,42 +364,84 @@ async function main() {
 
   // Сохранение результатов в CSV
   if (results.length > 0) {
-    // Получение всех уникальных месяцев
-    const allMonths = new Set();
-    results.forEach(row => {
-      Object.keys(row).forEach(key => {
-        if (key !== 'query' && key !== 'total') {
-          allMonths.add(key);
-        }
+    if (format === 'normal') {
+      // Обычная таблица: Запрос | Месяц | Частота
+      const normalData = [];
+      
+      results.forEach(row => {
+        const query = row.query;
+        Object.keys(row).forEach(key => {
+          if (key !== 'query' && key !== 'total') {
+            normalData.push({
+              query: query,
+              month: key,
+              frequency: row[key]
+            });
+          }
+        });
       });
-    });
 
-    const sortedMonths = Array.from(allMonths).sort();
+      const csvWriter = createObjectCsvWriter({
+        path: RESULT_FILE,
+        header: [
+          { id: 'query', title: 'Запрос' },
+          { id: 'month', title: 'Месяц' },
+          { id: 'frequency', title: 'Частота' }
+        ],
+        encoding: 'utf8'
+      });
 
-    // Формирование заголовков CSV
-    const headers = [
-      { id: 'query', title: 'Запрос' },
-      { id: 'total', title: 'Всего за период' },
-      ...sortedMonths.map(month => ({ id: month, title: month }))
-    ];
+      await csvWriter.writeRecords(normalData);
 
-    const csvWriter = createObjectCsvWriter({
-      path: RESULT_FILE,
-      header: headers,
-      encoding: 'utf8'
-    });
+      console.log(chalk.cyan('\n' + '='.repeat(60)));
+      console.log(chalk.green(`✅ Результаты сохранены в: ${RESULT_FILE}`));
+      console.log(chalk.green(`✅ Формат: Обычная таблица`));
+      console.log(chalk.green(`✅ Записей: ${normalData.length} (${successCount} запросов × месяцев)`));
+      if (errorCount > 0) {
+        console.log(chalk.yellow(`⚠️  Ошибок: ${errorCount} запросов`));
+      }
+      console.log(chalk.blue(`⏱️  Общее время: ${totalTime}с`));
+      console.log(chalk.gray(`   Средняя скорость: ${(requests.length / totalTime).toFixed(2)} запросов/сек`));
+      console.log(chalk.cyan('='.repeat(60) + '\n'));
 
-    await csvWriter.writeRecords(results);
+    } else {
+      // Перекрестная таблица: Запрос | Всего | 2024-01 | 2024-02 | ...
+      const allMonths = new Set();
+      results.forEach(row => {
+        Object.keys(row).forEach(key => {
+          if (key !== 'query' && key !== 'total') {
+            allMonths.add(key);
+          }
+        });
+      });
 
-    console.log(chalk.cyan('='.repeat(60)));
-    console.log(chalk.green(`✅ Результаты сохранены в: ${RESULT_FILE}`));
-    console.log(chalk.green(`✅ Успешно обработано: ${successCount} запросов`));
-    if (errorCount > 0) {
-      console.log(chalk.yellow(`⚠️  Ошибок: ${errorCount} запросов`));
+      const sortedMonths = Array.from(allMonths).sort();
+
+      const headers = [
+        { id: 'query', title: 'Запрос' },
+        { id: 'total', title: 'Всего за период' },
+        ...sortedMonths.map(month => ({ id: month, title: month }))
+      ];
+
+      const csvWriter = createObjectCsvWriter({
+        path: RESULT_FILE,
+        header: headers,
+        encoding: 'utf8'
+      });
+
+      await csvWriter.writeRecords(results);
+
+      console.log(chalk.cyan('\n' + '='.repeat(60)));
+      console.log(chalk.green(`✅ Результаты сохранены в: ${RESULT_FILE}`));
+      console.log(chalk.green(`✅ Формат: Перекрестная таблица`));
+      console.log(chalk.green(`✅ Успешно обработано: ${successCount} запросов`));
+      if (errorCount > 0) {
+        console.log(chalk.yellow(`⚠️  Ошибок: ${errorCount} запросов`));
+      }
+      console.log(chalk.blue(`⏱️  Общее время: ${totalTime}с`));
+      console.log(chalk.gray(`   Средняя скорость: ${(requests.length / totalTime).toFixed(2)} запросов/сек`));
+      console.log(chalk.cyan('='.repeat(60) + '\n'));
     }
-    console.log(chalk.blue(`⏱️  Общее время: ${totalTime}с`));
-    console.log(chalk.gray(`   Средняя скорость: ${(requests.length / totalTime).toFixed(2)} запросов/сек`));
-    console.log(chalk.cyan('='.repeat(60) + '\n'));
   } else {
     console.log(chalk.yellow('\n⚠️  Нет данных для сохранения'));
     console.log(chalk.red(`❌ Все запросы завершились с ошибкой\n`));
