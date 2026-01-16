@@ -8,8 +8,13 @@ node_modules/
 *.json
 
 # Результаты парсинга
+Results/
+**/Results/
+Parser_*/Results/
+*/results/
 Result/
-*/Result/
+**/Result/
+*/result/
 
 # Логи
 *.log
