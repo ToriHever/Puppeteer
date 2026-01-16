@@ -2,7 +2,7 @@ import { CONFIG } from './config.js';
 import { logger } from './logger.js';
 
 /**
- * Генерирует запросы с операторами
+ * Генерирует запросы с операторами (полный режим)
  */
 export function generateRequestsWithOperators(queries) {
   const updated = [];
@@ -17,6 +17,35 @@ export function generateRequestsWithOperators(queries) {
     updated.push({ type: 'withExclamation', query: `"${excl}"` });
   }
   return updated;
+}
+
+/**
+ * Генерирует простые запросы без операторов (быстрый режим)
+ */
+export function generateSimpleRequests(queries) {
+  const updated = [];
+  for (const q of queries) {
+    const t = q.trim();
+    if (!t) continue;
+    
+    updated.push({ type: 'original', query: t });
+  }
+  return updated;
+}
+
+/**
+ * Генерирует запросы в зависимости от режима
+ * @param {string[]} queries - Массив запросов
+ * @param {string} mode - Режим работы: 'full' или 'simple'
+ */
+export function generateRequests(queries, mode = 'full') {
+  if (mode === 'simple') {
+    logger.info('Режим: Простые запросы (без операторов)');
+    return generateSimpleRequests(queries);
+  } else {
+    logger.info('Режим: Полный анализ (с операторами)');
+    return generateRequestsWithOperators(queries);
+  }
 }
 
 /**
@@ -75,12 +104,30 @@ export function normalizeQueryKey(query) {
 }
 
 /**
- * Проверка наличия всех метрик
+ * Проверка наличия всех метрик (для полного режима)
  */
 export function hasAllMetrics(result) {
   return result.original !== '' && 
          result.withQuotes !== '' && 
          result.withExclamation !== '';
+}
+
+/**
+ * Проверка наличия метрик для простого режима
+ */
+export function hasSimpleMetrics(result) {
+  return result.original !== '';
+}
+
+/**
+ * Проверка завершенности результата в зависимости от режима
+ */
+export function isResultComplete(result, mode = 'full') {
+  if (mode === 'simple') {
+    return hasSimpleMetrics(result);
+  } else {
+    return hasAllMetrics(result);
+  }
 }
 
 /**

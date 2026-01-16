@@ -7,11 +7,11 @@ import { logger } from './logger.js';
 import { AuthManager } from './authManager.js';
 import { StateManager } from './stateManager.js';
 import { 
-  generateRequestsWithOperators, 
+  generateRequests,
   getRandomDelay, 
   delay, 
   normalizeQueryKey,
-  hasAllMetrics,
+  isResultComplete,
   formatProgress,
   retryWithBackoff,
   formatTime
@@ -23,7 +23,7 @@ puppeteer.use(StealthPlugin());
  * Основной класс парсера Wordstat
  */
 export class WordstatParser {
-  constructor() {
+  constructor(mode = 'full') {
     this.browser = null;
     this.page = null;
     this.authManager = null;
@@ -33,6 +33,7 @@ export class WordstatParser {
     this.tasks = [];
     this.startTime = null;
     this.processedCount = 0;
+    this.mode = mode; // 'full' или 'simple'
   }
 
   /**
@@ -46,15 +47,19 @@ export class WordstatParser {
       fs.mkdirSync(CONFIG.paths.outputDir, { recursive: true });
     }
 
-    // Настройка CSV-писателя
+    // Настройка CSV-писателя в зависимости от режима
+    const csvHeader = this.mode === 'simple' 
+      ? [{ id: 'query', title: 'Запрос' }, { id: 'frequency', title: 'Частота' }]
+      : [
+          { id: 'query', title: 'Запрос' },
+          { id: 'frequency', title: 'Частота' },
+          { id: 'frequencyWithQuotes', title: 'Частота с кавычками' },
+          { id: 'frequencyWithExclamation', title: 'Частота с восклицаниями' }
+        ];
+
     this.csvWriter = createCsvWriter({
       path: CONFIG.paths.outputFile,
-      header: [
-        { id: 'query', title: 'Запрос' },
-        { id: 'frequency', title: 'Частота' },
-        { id: 'frequencyWithQuotes', title: 'Частота с кавычками' },
-        { id: 'frequencyWithExclamation', title: 'Частота с восклицаниями' }
-      ],
+      header: csvHeader,
       append: fs.existsSync(CONFIG.paths.outputFile)
     });
 
@@ -71,7 +76,8 @@ export class WordstatParser {
     // Добавляем UI панель управления
     await this.setupControlPanel();
 
-    logger.success('Парсер инициализирован');
+    const modeText = this.mode === 'simple' ? 'быстрый (без операторов)' : 'полный (с операторами)';
+    logger.success(`Парсер инициализирован в режиме: ${modeText}`);
   }
 
   /**
@@ -220,9 +226,10 @@ export class WordstatParser {
       .split('\n')
       .filter(Boolean);
 
-    this.tasks = generateRequestsWithOperators(lines);
+    this.tasks = generateRequests(lines, this.mode);
     
-    logger.info(`Загружено ${lines.length} запросов, сгенерировано ${this.tasks.length} задач`);
+    const modeInfo = this.mode === 'simple' ? '(простой режим)' : '(полный режим)';
+    logger.info(`Загружено ${lines.length} запросов, сгенерировано ${this.tasks.length} задач ${modeInfo}`);
   }
 
   /**
@@ -287,7 +294,7 @@ export class WordstatParser {
         this.stateManager.updateResult(key, field, freq);
         this.stateManager.addProcessedTask(taskId);
 
-        logger.info(`✓ ${key} | ${field} = ${freq}`);
+        logger.info(`✔ ${key} | ${field} = ${freq}`);
 
       } catch (error) {
         if (error.message.includes('Waiting for selector')) {
@@ -306,14 +313,18 @@ export class WordstatParser {
       }
 
       // Сохраняем в CSV если все метрики собраны
-      if (hasAllMetrics(result)) {
-        await this.csvWriter.writeRecords([{
-          query: key,
-          frequency: result.original,
-          frequencyWithQuotes: result.withQuotes,
-          frequencyWithExclamation: result.withExclamation
-        }]);
-        logger.success(`✓ Запрос завершён: ${key}`);
+      if (isResultComplete(result, this.mode)) {
+        const csvRecord = this.mode === 'simple'
+          ? { query: key, frequency: result.original }
+          : {
+              query: key,
+              frequency: result.original,
+              frequencyWithQuotes: result.withQuotes,
+              frequencyWithExclamation: result.withExclamation
+            };
+
+        await this.csvWriter.writeRecords([csvRecord]);
+        logger.success(`✔ Запрос завершён: ${key}`);
       }
 
       this.processedCount++;
