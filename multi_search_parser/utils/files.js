@@ -105,8 +105,8 @@ export async function saveToCSV(results, filename, engineName = '') {
     
     const uniqueFilename = getUniqueFilename(filename);
     
-    // Заголовок CSV
-    const header = 'Запрос,Тип запроса,Поисковик,Позиция,Поз.Органика,Тип,Тип страницы,Заголовок,URL\n';
+    // Заголовок CSV с description
+    const header = 'Запрос,Тип запроса,Поисковик,Позиция,Поз.Органика,Тип,Тип страницы,Заголовок,Description,URL\n';
 
     // Формируем строки CSV
     const rows = results.map(result => {
@@ -119,6 +119,7 @@ export async function saveToCSV(results, filename, engineName = '') {
         escapeCSV(result.type),
         escapeCSV(result.pageType),
         escapeCSV(result.title),
+        escapeCSV(result.description || ''),
         escapeCSV(result.url)
       ].join(',');
     }).join('\n');
@@ -129,6 +130,14 @@ export async function saveToCSV(results, filename, engineName = '') {
 
     await writeFile(uniqueFilename, csvContent, 'utf-8');
     console.log(`✓ Результаты сохранены: ${uniqueFilename}`);
+    
+    // Статистика по description
+    const totalResults = results.length;
+    const withDescription = results.filter(r => r.description && r.description.length > 0).length;
+    const descriptionPercent = totalResults > 0 ? ((withDescription / totalResults) * 100).toFixed(1) : 0;
+    
+    console.log(`📊 Статистика description: ${withDescription}/${totalResults} (${descriptionPercent}%)`);
+    
   } catch (error) {
     console.error('Ошибка при сохранении CSV:', error.message);
     throw error;

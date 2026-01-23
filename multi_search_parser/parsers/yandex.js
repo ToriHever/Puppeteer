@@ -59,6 +59,43 @@ class YandexParser extends BaseParser {
         return 'Непонятная';
       }
       
+      // Функция извлечения description для Yandex
+      function extractYandexDescription(item) {
+        // Варианты селекторов для description в Yandex
+        const descriptionSelectors = [
+          '.OrganicTextContentSpan',
+          '.text-container',
+          '.Organic-ContentText',
+          '.VanillaReact.OrganicText',
+          '.TextContainer',
+          '.snippet__text',
+          '.text'
+        ];
+        
+        for (const selector of descriptionSelectors) {
+          const descElement = item.querySelector(selector);
+          if (descElement) {
+            // Получаем текст, убираем лишние пробелы
+            const text = descElement.textContent.trim();
+            if (text && text.length > 10) {
+              return text.replace(/\s+/g, ' ');
+            }
+          }
+        }
+        
+        // Если не нашли через селекторы, пробуем найти любой текстовый блок
+        const textBlocks = item.querySelectorAll('div[class*="text"], span[class*="text"]');
+        for (const block of textBlocks) {
+          const text = block.textContent.trim();
+          // Исключаем заголовки и короткие фрагменты
+          if (text && text.length > 30 && text.length < 500) {
+            return text.replace(/\s+/g, ' ');
+          }
+        }
+        
+        return '';
+      }
+      
       const organicResults = [];
       const resultItems = document.querySelectorAll('.serp-item[data-cid]');
 
@@ -70,6 +107,9 @@ class YandexParser extends BaseParser {
         const linkElement = item.querySelector('.OrganicTitle-Link, .Link.organic__url');
         const url = linkElement ? linkElement.href : '';
         const title = linkElement ? linkElement.textContent.trim() : '';
+        
+        // Извлекаем description
+        const description = extractYandexDescription(item);
 
         if (url && title) {
           const linkType = url.includes('yabs.yandex.ru') || isAd ? 'Реклама' : 'Органика';
@@ -87,6 +127,7 @@ class YandexParser extends BaseParser {
             type: linkType,
             pageType: pageType,
             title: title,
+            description: description,
             url: url
           });
           position++;
@@ -97,6 +138,11 @@ class YandexParser extends BaseParser {
     }, query, INFO_PATTERNS, COMMERCE_PATTERNS);
 
     console.log(`  [${this.name}] 📊 Найдено ${results.length} результатов`);
+    
+    // Подсчитываем сколько результатов имеют description
+    const withDescription = results.filter(r => r.description && r.description.length > 0).length;
+    console.log(`  [${this.name}] 📝 Description найден у ${withDescription}/${results.length} результатов`);
+    
     return results;
   }
 }
