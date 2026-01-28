@@ -17,8 +17,10 @@ const envPath = path.join(__dirname, '..', '.env');
 dotenv.config({ path: envPath });
 
 const API_TOKEN = process.env.WORDSTAT_API_TOKEN;
-// Правильный URL для нового Wordstat API
-const API_URL = 'https://api.wordstat.yandex.net/v1/dynamics';
+
+// API URLs
+const API_DYNAMICS_URL = 'https://api.wordstat.yandex.net/v1/dynamics';
+const API_TOP_REQUESTS_URL = 'https://api.wordstat.yandex.net/v1/topRequests';
 
 // Проверка наличия токена
 if (!API_TOKEN) {
@@ -63,6 +65,29 @@ function isValidDate(dateString) {
   
   const date = new Date(dateString);
   return date instanceof Date && !isNaN(date);
+}
+
+/**
+ * Выбор режима работы
+ */
+async function selectMode() {
+  console.log(chalk.cyan('\n' + '='.repeat(60)));
+  console.log(chalk.cyan('  🎯 Выбор режима работы'));
+  console.log(chalk.cyan('='.repeat(60) + '\n'));
+
+  console.log(chalk.white('Доступные режимы:'));
+  console.log(chalk.yellow('  1') + chalk.white(' - Динамика запросов (получение статистики показов по месяцам)'));
+  console.log(chalk.yellow('  2') + chalk.white(' - Топовые запросы (получение связанных популярных запросов)\n'));
+
+  let choice = await question(chalk.green('Выберите режим (1-2): '));
+  choice = choice.trim();
+
+  const mode = (choice === '2') ? 'top' : 'dynamics';
+  const modeName = (mode === 'top') ? 'Топовые запросы' : 'Динамика запросов';
+
+  console.log(chalk.green(`✓ Выбран режим: ${modeName}\n`));
+
+  return mode;
 }
 
 /**
@@ -218,7 +243,7 @@ async function getWordstatDynamics(phrase, fromDate, toDate, index, total) {
   };
 
   try {
-    const response = await axios.post(API_URL, requestBody, {
+    const response = await axios.post(API_DYNAMICS_URL, requestBody, {
       headers: {
         'Content-Type': 'application/json;charset=utf-8',
         'Authorization': `Bearer ${API_TOKEN}`
@@ -259,9 +284,46 @@ async function getWordstatDynamics(phrase, fromDate, toDate, index, total) {
 }
 
 /**
- * Обработка запросов пакетами (до 10 одновременно)
+ * Получение топовых запросов для фразы
  */
-async function processBatch(phrases, fromDate, toDate, startIndex) {
+async function getTopRequests(phrase, index, total) {
+  const requestBody = {
+    phrase: phrase
+  };
+
+  try {
+    const response = await axios.post(API_TOP_REQUESTS_URL, requestBody, {
+      headers: {
+        'Content-Type': 'application/json;charset=utf-8',
+        'Authorization': `Bearer ${API_TOKEN}`
+      }
+    });
+
+    if (response.data && response.data.topRequests) {
+      const topRequests = response.data.topRequests;
+      
+      console.log(chalk.green(`✓ [${index}/${total}] "${phrase}" - найдено ${topRequests.length} связанных запросов`));
+
+      return {
+        phrase,
+        topRequests: topRequests,
+        requestPhrase: response.data.requestPhrase,
+        success: true
+      };
+    }
+
+    console.log(chalk.yellow(`⚠️  [${index}/${total}] "${phrase}" - нет данных`));
+    return { phrase, success: false };
+  } catch (error) {
+    console.error(chalk.red(`❌ [${index}/${total}] "${phrase}" - ${error.response?.data?.message || error.message}`));
+    return { phrase, success: false, error: error.message };
+  }
+}
+
+/**
+ * Обработка запросов пакетами для режима динамики
+ */
+async function processDynamicsBatch(phrases, fromDate, toDate, startIndex) {
   const batchPromises = phrases.map((phrase, i) => 
     getWordstatDynamics(phrase, fromDate, toDate, startIndex + i + 1, startIndex + phrases.length)
   );
@@ -270,9 +332,20 @@ async function processBatch(phrases, fromDate, toDate, startIndex) {
 }
 
 /**
- * Обработка всех запросов с ограничением 10 req/sec
+ * Обработка запросов пакетами для режима топовых запросов
  */
-async function processAllRequests(requests, fromDate, toDate) {
+async function processTopRequestsBatch(phrases, startIndex) {
+  const batchPromises = phrases.map((phrase, i) => 
+    getTopRequests(phrase, startIndex + i + 1, startIndex + phrases.length)
+  );
+  
+  return await Promise.all(batchPromises);
+}
+
+/**
+ * Обработка всех запросов в режиме динамики
+ */
+async function processAllDynamics(requests, fromDate, toDate) {
   const BATCH_SIZE = 10;
   const results = [];
   let successCount = 0;
@@ -288,7 +361,7 @@ async function processAllRequests(requests, fromDate, toDate) {
     console.log(chalk.blue(`\n📦 Пакет ${batchNumber}/${totalBatches} (${batch.length} запросов)...`));
     
     const startTime = Date.now();
-    const batchResults = await processBatch(batch, fromDate, toDate, i);
+    const batchResults = await processDynamicsBatch(batch, fromDate, toDate, i);
     const endTime = Date.now();
 
     // Обработка результатов пакета
@@ -320,22 +393,202 @@ async function processAllRequests(requests, fromDate, toDate) {
 }
 
 /**
+ * Обработка всех запросов в режиме топовых запросов
+ */
+async function processAllTopRequests(requests) {
+  const BATCH_SIZE = 10;
+  const results = [];
+  let successCount = 0;
+  let errorCount = 0;
+
+  console.log(chalk.cyan(`\n⚡ Режим быстрой обработки: до ${BATCH_SIZE} запросов одновременно\n`));
+
+  for (let i = 0; i < requests.length; i += BATCH_SIZE) {
+    const batch = requests.slice(i, i + BATCH_SIZE);
+    const batchNumber = Math.floor(i / BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(requests.length / BATCH_SIZE);
+
+    console.log(chalk.blue(`\n📦 Пакет ${batchNumber}/${totalBatches} (${batch.length} запросов)...`));
+    
+    const startTime = Date.now();
+    const batchResults = await processTopRequestsBatch(batch, i);
+    const endTime = Date.now();
+
+    // Обработка результатов пакета
+    batchResults.forEach(result => {
+      if (result.success && result.topRequests) {
+        // Добавляем каждый связанный запрос как отдельную строку
+        result.topRequests.forEach((topRequest, index) => {
+          results.push({
+            originalQuery: result.phrase,
+            rank: index + 1,
+            relatedQuery: topRequest.phrase,
+            frequency: topRequest.count
+          });
+        });
+        successCount++;
+      } else {
+        errorCount++;
+      }
+    });
+
+    // Показываем статистику пакета
+    const batchTime = ((endTime - startTime) / 1000).toFixed(2);
+    console.log(chalk.gray(`   Обработано за ${batchTime}с`));
+
+    // Задержка между пакетами (1 секунда)
+    if (i + BATCH_SIZE < requests.length) {
+      console.log(chalk.gray(`   ⏱️  Пауза 1 секунда перед следующим пакетом...`));
+      await delay(1000);
+    }
+  }
+
+  return { results, successCount, errorCount };
+}
+
+/**
+ * Сохранение результатов динамики в CSV
+ */
+async function saveDynamicsResults(results, format, fromDate, toDate, successCount, errorCount, totalTime, totalRequests) {
+  const RESULT_FILE = path.join(RESULT_DIR, `wordstat_dynamics_${fromDate}_${toDate}_${format}.csv`);
+
+  if (format === 'normal') {
+    // Обычная таблица: Запрос | Месяц | Частота
+    const normalData = [];
+    
+    results.forEach(row => {
+      const query = row.query;
+      Object.keys(row).forEach(key => {
+        if (key !== 'query' && key !== 'total') {
+          normalData.push({
+            query: query,
+            month: key,
+            frequency: row[key]
+          });
+        }
+      });
+    });
+
+    const csvWriter = createObjectCsvWriter({
+      path: RESULT_FILE,
+      header: [
+        { id: 'query', title: 'Запрос' },
+        { id: 'month', title: 'Месяц' },
+        { id: 'frequency', title: 'Частота' }
+      ],
+      encoding: 'utf8'
+    });
+
+    await csvWriter.writeRecords(normalData);
+
+    console.log(chalk.cyan('\n' + '='.repeat(60)));
+    console.log(chalk.green(`✅ Результаты сохранены в: ${RESULT_FILE}`));
+    console.log(chalk.green(`✅ Формат: Обычная таблица`));
+    console.log(chalk.green(`✅ Записей: ${normalData.length} (${successCount} запросов × месяцев)`));
+    if (errorCount > 0) {
+      console.log(chalk.yellow(`⚠️  Ошибок: ${errorCount} запросов`));
+    }
+    console.log(chalk.blue(`⏱️  Общее время: ${totalTime}с`));
+    console.log(chalk.gray(`   Средняя скорость: ${(totalRequests / totalTime).toFixed(2)} запросов/сек`));
+    console.log(chalk.cyan('='.repeat(60) + '\n'));
+
+  } else {
+    // Перекрестная таблица: Запрос | Всего | 2024-01 | 2024-02 | ...
+    const allMonths = new Set();
+    results.forEach(row => {
+      Object.keys(row).forEach(key => {
+        if (key !== 'query' && key !== 'total') {
+          allMonths.add(key);
+        }
+      });
+    });
+
+    const sortedMonths = Array.from(allMonths).sort();
+
+    const headers = [
+      { id: 'query', title: 'Запрос' },
+      { id: 'total', title: 'Всего за период' },
+      ...sortedMonths.map(month => ({ id: month, title: month }))
+    ];
+
+    const csvWriter = createObjectCsvWriter({
+      path: RESULT_FILE,
+      header: headers,
+      encoding: 'utf8'
+    });
+
+    await csvWriter.writeRecords(results);
+
+    console.log(chalk.cyan('\n' + '='.repeat(60)));
+    console.log(chalk.green(`✅ Результаты сохранены в: ${RESULT_FILE}`));
+    console.log(chalk.green(`✅ Формат: Перекрестная таблица`));
+    console.log(chalk.green(`✅ Успешно обработано: ${successCount} запросов`));
+    if (errorCount > 0) {
+      console.log(chalk.yellow(`⚠️  Ошибок: ${errorCount} запросов`));
+    }
+    console.log(chalk.blue(`⏱️  Общее время: ${totalTime}с`));
+    console.log(chalk.gray(`   Средняя скорость: ${(totalRequests / totalTime).toFixed(2)} запросов/сек`));
+    console.log(chalk.cyan('='.repeat(60) + '\n'));
+  }
+}
+
+/**
+ * Сохранение результатов топовых запросов в CSV
+ */
+async function saveTopRequestsResults(results, successCount, errorCount, totalTime, totalRequests) {
+  const timestamp = new Date().toISOString().split('T')[0];
+  const RESULT_FILE = path.join(RESULT_DIR, `wordstat_top_requests_${timestamp}.csv`);
+
+  const csvWriter = createObjectCsvWriter({
+    path: RESULT_FILE,
+    header: [
+      { id: 'originalQuery', title: 'Исходный запрос' },
+      { id: 'rank', title: 'Позиция' },
+      { id: 'relatedQuery', title: 'Связанный запрос' },
+      { id: 'frequency', title: 'Частота показов' }
+    ],
+    encoding: 'utf8'
+  });
+
+  await csvWriter.writeRecords(results);
+
+  console.log(chalk.cyan('\n' + '='.repeat(60)));
+  console.log(chalk.green(`✅ Результаты сохранены в: ${RESULT_FILE}`));
+  console.log(chalk.green(`✅ Успешно обработано: ${successCount} запросов`));
+  console.log(chalk.green(`✅ Найдено связанных запросов: ${results.length}`));
+  if (errorCount > 0) {
+    console.log(chalk.yellow(`⚠️  Ошибок: ${errorCount} запросов`));
+  }
+  console.log(chalk.blue(`⏱️  Общее время: ${totalTime}с`));
+  console.log(chalk.gray(`   Средняя скорость: ${(totalRequests / totalTime).toFixed(2)} запросов/сек`));
+  console.log(chalk.cyan('='.repeat(60) + '\n'));
+}
+
+/**
  * Основная функция
  */
 async function main() {
   console.log(chalk.cyan('\n' + '='.repeat(60)));
-  console.log(chalk.cyan('  📈 Wordstat API - Получение динамики запросов'));
+  console.log(chalk.cyan('  📈 Wordstat API - Парсер данных Яндекс.Вордстат'));
   console.log(chalk.cyan('='.repeat(60) + '\n'));
 
-  // Интерактивный выбор периода
-  const { fromDate, toDate, periodName } = await selectPeriod();
+  // Выбор режима работы
+  const mode = await selectMode();
 
-  // Интерактивный выбор формата
-  const format = await selectFormat();
+  let fromDate, toDate, periodName, format;
 
-  const RESULT_FILE = path.join(RESULT_DIR, `wordstat_${fromDate}_${toDate}_${format}.csv`);
+  if (mode === 'dynamics') {
+    // Интерактивный выбор периода для режима динамики
+    const period = await selectPeriod();
+    fromDate = period.fromDate;
+    toDate = period.toDate;
+    periodName = period.periodName;
 
-  console.log(chalk.gray(`API URL: ${API_URL}`));
+    // Интерактивный выбор формата для режима динамики
+    format = await selectFormat();
+  }
+
+  console.log(chalk.gray(`API URL: ${mode === 'dynamics' ? API_DYNAMICS_URL : API_TOP_REQUESTS_URL}`));
   console.log(chalk.gray(`Токен: ${API_TOKEN.substring(0, 10)}...${API_TOKEN.substring(API_TOKEN.length - 5)}`));
   console.log(chalk.gray(`Метод авторизации: Bearer Token\n`));
 
@@ -346,105 +599,44 @@ async function main() {
     return;
   }
 
-  console.log(chalk.green(`✓ Найдено запросов: ${requests.length}\n`));
-
-  // Подтверждение запуска
-  const confirm = await question(chalk.yellow('Начать обработку? (y/n): '));
-  if (confirm.toLowerCase() !== 'y' && confirm.toLowerCase() !== 'yes' && confirm.toLowerCase() !== 'д') {
-    console.log(chalk.yellow('\n⚠️  Обработка отменена\n'));
-    rl.close();
-    return;
-  }
-
-  console.log('\n');
+  console.log(chalk.green(`✓ Найдено запросов: ${requests.length}`));
+  console.log(chalk.cyan('🚀 Начинаю обработку...\n'));
 
   const startTime = Date.now();
-  const { results, successCount, errorCount } = await processAllRequests(requests, fromDate, toDate);
-  const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+  let results, successCount, errorCount;
 
-  // Сохранение результатов в CSV
-  if (results.length > 0) {
-    if (format === 'normal') {
-      // Обычная таблица: Запрос | Месяц | Частота
-      const normalData = [];
-      
-      results.forEach(row => {
-        const query = row.query;
-        Object.keys(row).forEach(key => {
-          if (key !== 'query' && key !== 'total') {
-            normalData.push({
-              query: query,
-              month: key,
-              frequency: row[key]
-            });
-          }
-        });
-      });
+  if (mode === 'dynamics') {
+    // Режим динамики
+    const processed = await processAllDynamics(requests, fromDate, toDate);
+    results = processed.results;
+    successCount = processed.successCount;
+    errorCount = processed.errorCount;
 
-      const csvWriter = createObjectCsvWriter({
-        path: RESULT_FILE,
-        header: [
-          { id: 'query', title: 'Запрос' },
-          { id: 'month', title: 'Месяц' },
-          { id: 'frequency', title: 'Частота' }
-        ],
-        encoding: 'utf8'
-      });
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
 
-      await csvWriter.writeRecords(normalData);
-
-      console.log(chalk.cyan('\n' + '='.repeat(60)));
-      console.log(chalk.green(`✅ Результаты сохранены в: ${RESULT_FILE}`));
-      console.log(chalk.green(`✅ Формат: Обычная таблица`));
-      console.log(chalk.green(`✅ Записей: ${normalData.length} (${successCount} запросов × месяцев)`));
-      if (errorCount > 0) {
-        console.log(chalk.yellow(`⚠️  Ошибок: ${errorCount} запросов`));
-      }
-      console.log(chalk.blue(`⏱️  Общее время: ${totalTime}с`));
-      console.log(chalk.gray(`   Средняя скорость: ${(requests.length / totalTime).toFixed(2)} запросов/сек`));
-      console.log(chalk.cyan('='.repeat(60) + '\n'));
-
+    // Сохранение результатов
+    if (results.length > 0) {
+      await saveDynamicsResults(results, format, fromDate, toDate, successCount, errorCount, totalTime, requests.length);
     } else {
-      // Перекрестная таблица: Запрос | Всего | 2024-01 | 2024-02 | ...
-      const allMonths = new Set();
-      results.forEach(row => {
-        Object.keys(row).forEach(key => {
-          if (key !== 'query' && key !== 'total') {
-            allMonths.add(key);
-          }
-        });
-      });
-
-      const sortedMonths = Array.from(allMonths).sort();
-
-      const headers = [
-        { id: 'query', title: 'Запрос' },
-        { id: 'total', title: 'Всего за период' },
-        ...sortedMonths.map(month => ({ id: month, title: month }))
-      ];
-
-      const csvWriter = createObjectCsvWriter({
-        path: RESULT_FILE,
-        header: headers,
-        encoding: 'utf8'
-      });
-
-      await csvWriter.writeRecords(results);
-
-      console.log(chalk.cyan('\n' + '='.repeat(60)));
-      console.log(chalk.green(`✅ Результаты сохранены в: ${RESULT_FILE}`));
-      console.log(chalk.green(`✅ Формат: Перекрестная таблица`));
-      console.log(chalk.green(`✅ Успешно обработано: ${successCount} запросов`));
-      if (errorCount > 0) {
-        console.log(chalk.yellow(`⚠️  Ошибок: ${errorCount} запросов`));
-      }
-      console.log(chalk.blue(`⏱️  Общее время: ${totalTime}с`));
-      console.log(chalk.gray(`   Средняя скорость: ${(requests.length / totalTime).toFixed(2)} запросов/сек`));
-      console.log(chalk.cyan('='.repeat(60) + '\n'));
+      console.log(chalk.yellow('\n⚠️  Нет данных для сохранения'));
+      console.log(chalk.red(`❌ Все запросы завершились с ошибкой\n`));
     }
   } else {
-    console.log(chalk.yellow('\n⚠️  Нет данных для сохранения'));
-    console.log(chalk.red(`❌ Все запросы завершились с ошибкой\n`));
+    // Режим топовых запросов
+    const processed = await processAllTopRequests(requests);
+    results = processed.results;
+    successCount = processed.successCount;
+    errorCount = processed.errorCount;
+
+    const totalTime = ((Date.now() - startTime) / 1000).toFixed(2);
+
+    // Сохранение результатов
+    if (results.length > 0) {
+      await saveTopRequestsResults(results, successCount, errorCount, totalTime, requests.length);
+    } else {
+      console.log(chalk.yellow('\n⚠️  Нет данных для сохранения'));
+      console.log(chalk.red(`❌ Все запросы завершились с ошибкой\n`));
+    }
   }
 
   rl.close();

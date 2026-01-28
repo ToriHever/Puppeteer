@@ -26,37 +26,12 @@ const PARSERS = {
     icon: '📈',
     color: 'green'
   },
-  'multi-yandex': {
-    name: 'Multi Search - Yandex',
-    description: 'Парсинг результатов поиска Яндекс',
+  'multi-search': {
+    name: 'Multi Search Parser (Yandex & Google)',
+    description: 'Парсинг результатов поиска (выбор в парсере)',
     path: './multi_search_parser/index.js',
     icon: '🔍',
-    color: 'yellow',
-    args: ['--engine', 'yandex']
-  },
-  'multi-google': {
-    name: 'Multi Search - Google',
-    description: 'Парсинг результатов поиска Google',
-    path: './multi_search_parser/index.js',
-    icon: '🔎',
-    color: 'blue',
-    args: ['--engine', 'google']
-  },
-  'multi-both-seq': {
-    name: 'Multi Search - Both (Sequential)',
-    description: 'Парсинг Yandex и Google последовательно',
-    path: './multi_search_parser/index.js',
-    icon: '🔄',
-    color: 'magenta',
-    args: ['--engine', 'both-seq']
-  },
-  'multi-both-par': {
-    name: 'Multi Search - Both (Parallel)',
-    description: 'Парсинг Yandex и Google параллельно',
-    path: './multi_search_parser/index.js',
-    icon: '⚡',
-    color: 'white',
-    args: ['--engine', 'both-par']
+    color: 'magenta'
   }
 };
 
@@ -134,10 +109,7 @@ class ParserLauncher {
     const requestsFiles = {
       'wordstat': path.join(__dirname, 'Parser_request', 'requests.txt'),
       'wordstat-api': path.join(__dirname, 'Parser_wordstat_api', 'requests.txt'),
-      'multi-yandex': path.join(__dirname, 'multi_search_parser', 'scripts', 'queries.txt'),
-      'multi-google': path.join(__dirname, 'multi_search_parser', 'scripts', 'queries.txt'),
-      'multi-both-seq': path.join(__dirname, 'multi_search_parser', 'scripts', 'queries.txt'),
-      'multi-both-par': path.join(__dirname, 'multi_search_parser', 'scripts', 'queries.txt')
+      'multi-search': path.join(__dirname, 'multi_search_parser', 'scripts', 'queries.txt')
     };
 
     const filePath = requestsFiles[parserKey];
@@ -255,23 +227,28 @@ class ParserLauncher {
   }
 
   // Ожидание ввода пользователя
-  async prompt(question) {
+  async prompt(question, defaultValue = '') {
     this.rl = readline.createInterface({
       input: process.stdin,
       output: process.stdout
     });
 
     return new Promise((resolve) => {
-      this.rl.question(chalk.bold.cyan(question), (answer) => {
+      const promptText = defaultValue 
+        ? chalk.bold.cyan(question) + chalk.gray(` [${defaultValue}]`) + ' '
+        : chalk.bold.cyan(question);
+      
+      this.rl.question(promptText, (answer) => {
         this.rl.close();
-        resolve(answer.trim());
+        const trimmedAnswer = answer.trim();
+        resolve(trimmedAnswer === '' ? defaultValue : trimmedAnswer);
       });
     });
   }
 
   // Пауза с сообщением
   async pause(message = '\nНажмите Enter для продолжения...') {
-    await this.prompt(message);
+    await this.prompt(message, '');
   }
 
   // Главное меню
@@ -281,7 +258,7 @@ class ParserLauncher {
       this.drawHeader();
       this.drawMenu();
 
-      const choice = await this.prompt('Выберите парсер (0-5): ');
+      const choice = await this.prompt('Выберите парсер (0-3): ');
       const choiceNum = parseInt(choice);
 
       // Выход
@@ -313,10 +290,10 @@ class ParserLauncher {
         continue;
       }
 
-      console.log(chalk.yellow('\n⚠️  Парсер будет запущен. Продолжить?'));
-      const confirm = await this.prompt('Введите "yes" для подтверждения: ');
+      // Простое подтверждение с Y по умолчанию
+      const confirm = await this.prompt('\nЗапустить парсер? (Y/n):', 'Y');
 
-      if (confirm.toLowerCase() !== 'yes' && confirm.toLowerCase() !== 'y') {
+      if (confirm.toLowerCase() !== 'y' && confirm.toLowerCase() !== 'yes') {
         console.log(chalk.yellow('\n⊗ Запуск отменён'));
         await this.pause();
         continue;

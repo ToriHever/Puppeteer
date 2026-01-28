@@ -29,7 +29,6 @@ class GoogleParser extends BaseParser {
       timeout: 30000
     });
 
-
     // Делаем несколько случайных движений мыши по странице
     const viewport = page.viewport();
     for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
@@ -64,6 +63,74 @@ class GoogleParser extends BaseParser {
         if (isCommerce) return 'Коммерческая';
         
         return 'Непонятная';
+      }
+      
+      // Функция извлечения description для Google
+      function extractGoogleDescription(item) {
+        // Варианты селекторов для description в Google
+        const descriptionSelectors = [
+          '[data-sncf="1"]',
+          '[data-content-feature="1"]',
+          '.VwiC3b',
+          '.yXK7lf',
+          '.s3v9rd',
+          '.st',
+          'div[style*="-webkit-line-clamp"]',
+          'span[style*="-webkit-line-clamp"]',
+          '.lEBKkf'
+        ];
+        
+        for (const selector of descriptionSelectors) {
+          const descElement = item.querySelector(selector);
+          if (descElement) {
+            const text = descElement.textContent.trim();
+            if (text && text.length > 10) {
+              return text.replace(/\s+/g, ' ');
+            }
+          }
+        }
+        
+        // Пробуем найти элемент по атрибутам data
+        const dataElements = item.querySelectorAll('[data-sncf], [data-content-feature]');
+        for (const elem of dataElements) {
+          const text = elem.textContent.trim();
+          if (text && text.length > 30 && text.length < 500) {
+            return text.replace(/\s+/g, ' ');
+          }
+        }
+        
+        // Ищем div/span с ограничением строк
+        const clampedElements = item.querySelectorAll('div[style*="line-clamp"], span[style*="line-clamp"]');
+        for (const elem of clampedElements) {
+          const text = elem.textContent.trim();
+          if (text && text.length > 30 && text.length < 500) {
+            // Проверяем что это не заголовок
+            if (!elem.closest('h1, h2, h3, h4, h5, h6')) {
+              return text.replace(/\s+/g, ' ');
+            }
+          }
+        }
+        
+        // Последняя попытка - ищем любой текстовый блок рядом с заголовком
+        const titleElement = item.querySelector('h3');
+        if (titleElement) {
+          const parent = titleElement.closest('div');
+          if (parent) {
+            const textDivs = parent.querySelectorAll('div');
+            for (const div of textDivs) {
+              const text = div.textContent.trim();
+              if (text && 
+                  text.length > 30 && 
+                  text.length < 500 && 
+                  !div.querySelector('h3') &&
+                  !text.includes('http')) {
+                return text.replace(/\s+/g, ' ');
+              }
+            }
+          }
+        }
+        
+        return '';
       }
       
       const organicResults = [];
@@ -114,12 +181,14 @@ class GoogleParser extends BaseParser {
         let titleElement = item.querySelector('h3');
         if (!titleElement) titleElement = item.querySelector('[role="heading"]');
         if (!titleElement && linkElement) {
-          // Пробуем найти заголовок рядом со ссылкой
           const parent = linkElement.closest('div');
           if (parent) titleElement = parent.querySelector('h3, [role="heading"]');
         }
         
         const title = titleElement ? titleElement.textContent.trim() : '';
+        
+        // Извлекаем description
+        const description = extractGoogleDescription(item);
 
         // Пропускаем пустые результаты и служебные ссылки Google
         if (url && title && 
@@ -146,6 +215,7 @@ class GoogleParser extends BaseParser {
             type: linkType,
             pageType: pageType,
             title: title,
+            description: description,
             url: url
           });
           position++;
@@ -156,6 +226,10 @@ class GoogleParser extends BaseParser {
     }, query, INFO_PATTERNS, COMMERCE_PATTERNS);
 
     console.log(`  [${this.name}] 📊 Найдено ${results.length} результатов`);
+    
+    // Подсчитываем сколько результатов имеют description
+    const withDescription = results.filter(r => r.description && r.description.length > 0).length;
+    console.log(`  [${this.name}] 📝 Description найден у ${withDescription}/${results.length} результатов`);
     
     // Если результатов мало, выводим отладочную информацию
     if (results.length < 5) {
