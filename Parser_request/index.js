@@ -23,6 +23,37 @@ function question(prompt) {
 }
 
 /**
+ * Выбор режима работы парсера
+ */
+async function selectParsingMode() {
+  console.log('\n' + '='.repeat(60));
+  console.log('⚙️  ВЫБОР РЕЖИМА РАБОТЫ');
+  console.log('='.repeat(60));
+  console.log('\n1. 🚀 ПОЛНЫЙ РЕЖИМ (с операторами)');
+  console.log('   - Базовый запрос');
+  console.log('   - Запрос в кавычках "..."');
+  console.log('   - Запрос с восклицаниями !слово');
+  console.log('   - Собирает 3 метрики на каждый запрос\n');
+  
+  console.log('2. ⚡ БЫСТРЫЙ РЕЖИМ (без операторов)');
+  console.log('   - Только базовый запрос');
+  console.log('   - Собирает 1 метрику на каждый запрос');
+  console.log('   - В 3 раза быстрее\n');
+  
+  console.log('='.repeat(60) + '\n');
+
+  const answer = await question('Выберите режим (1 или 2) [1]: ');
+  
+  if (answer === '2') {
+    logger.info('✅ Выбран БЫСТРЫЙ режим (без операторов)');
+    return 'simple';
+  } else {
+    logger.info('✅ Выбран ПОЛНЫЙ режим (с операторами)');
+    return 'full';
+  }
+}
+
+/**
  * Очистка результатов перед запуском
  */
 async function clearResultsIfNeeded() {
@@ -102,16 +133,19 @@ async function main() {
     validateConfig();
     
     console.log('\n' + '='.repeat(60));
-    console.log('🚀 WORDSTAT PARSER v2.1');
+    console.log('🚀 WORDSTAT PARSER v2.2');
     console.log('='.repeat(60) + '\n');
+
+    // Выбор режима работы
+    const mode = await selectParsingMode();
 
     // Проверка и очистка результатов
     await clearResultsIfNeeded();
 
     logger.info('🚀 Запуск парсера...');
 
-    // Создание и запуск парсера
-    parser = new WordstatParser();
+    // Создание и запуск парсера с выбранным режимом
+    parser = new WordstatParser(mode);
     
     // Обработка сигналов завершения
     setupGracefulShutdown(parser);
@@ -120,7 +154,8 @@ async function main() {
     await parser.run();
 
     // Уведомление об успехе
-    await sendTelegramMessage('✅ Парсинг Wordstat успешно завершён!');
+    const modeText = mode === 'simple' ? 'быстром' : 'полном';
+    await sendTelegramMessage(`✅ Парсинг Wordstat в ${modeText} режиме успешно завершён!`);
     logger.success('Программа завершена успешно');
 
     process.exit(0);
