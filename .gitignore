@@ -33,3 +33,5 @@ Thumbs.db
 # Временные файлы
 *.tmp
 temp/
+
+*/requests.txt
