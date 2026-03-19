@@ -27,6 +27,7 @@ const EXCLUDED_DOMAINS = [
   'support.google.com',
   'www.google.com',
   'www.google.ru',
+  'www.google-analytics.com'
 ];
 
 const CONFIG = {
