@@ -6,7 +6,7 @@ const path = require('path');
 
 // Домен, ссылки на который ищем (вписывай сюда)
 const TARGET_DOMAINS = [
-  'ddos-guard.ru',
+  'ddos-guard.net',
   // 'another-domain.com',
 ];
 
