@@ -7,11 +7,16 @@ import { fileURLToPath } from 'url';
 
 // Домены, ссылки на которые ищем
 const TARGET_DOMAINS = [
-<<<<<<< HEAD
-=======
   'ddos-guard.ru',
->>>>>>> f3a0b51de26040fa5886c5cc8affdbe445c89f94
   'ddos-guard.net',
+  'kaspersky.ru',
+  'curator.pro',
+  'cloud.ru',
+  'ptsecurity.com',
+  'servicepipe.ru',
+  'rt-solar.ru',
+  'stormwall.pro',
+  'ngenix.net'
   // 'another-domain.com',
 ];
 
@@ -30,7 +35,6 @@ const EXCLUDED_DOMAINS = [
   'support.google.com',
   'www.google.com',
   'www.google.ru',
-  'www.google-analytics.com'
 ];
 
 const CONFIG = {
@@ -258,7 +262,6 @@ async function run() {
         console.warn(`  ⚠️  HTTP ${status} — записываю в лог ошибок`);
         appendError(ERRORS_PATH, pageUrl, `HTTP_${status}`, `Сервер вернул статус ${status}`);
         countErr++;
-        await page.close();
         continue;
       }
 
@@ -267,7 +270,6 @@ async function run() {
         console.warn(`  ⚠️  Капча/блокировка — записываю в лог ошибок`);
         appendError(ERRORS_PATH, pageUrl, 'BLOCKED', detail);
         countErr++;
-        await page.close();
         continue;
       }
 
@@ -327,7 +329,11 @@ async function run() {
       appendError(ERRORS_PATH, pageUrl, errorType, err.message);
       countErr++;
     } finally {
-      await page.close();
+      try {
+        await page.close();
+      } catch {
+        // Страница уже закрылась сама (редирект, краш вкладки) — игнорируем
+      }
     }
 
     await delay(CONFIG.delayBetweenPages);
