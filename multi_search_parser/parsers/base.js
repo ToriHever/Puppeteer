@@ -3,6 +3,7 @@ import { readQueries, readCookies, saveCookies, saveToCSV, saveIncompleteQueries
 import { configureBrowser } from '../utils/browser.js';
 import { sleep, sleepWithPauseCheck, randomMouseMovement, waitForUserInput, selectMode } from '../utils/helpers.js';
 import { isPaused, pauseMessage } from '../utils/hotkeys.js';
+import { detectQueryIntentByKeywords } from '../utils/queryIntent.js';
 
 export const MODES = {
   COOKIE: 'cookie',
@@ -41,17 +42,24 @@ export default class BaseParser {
     };
   }
 
-  // Определение типа запроса
+  // Определение типа запроса.
+  // Приоритет — явные ключевые слова в тексте самого запроса ("купить",
+  // "что такое" и т.п.): это прямой сигнал намерения. Если в запросе таких
+  // маркеров нет (или они противоречат друг другу) — запасной вариант:
+  // судим по составу выдачи (доле коммерческих страниц среди органики).
   determineQueryType(results, query) {
+    const byKeyword = detectQueryIntentByKeywords(query);
+    if (byKeyword) return byKeyword;
+
     const organicResults = results.filter(r => r.query === query && r.type === 'Органика');
-    
+
     if (organicResults.length === 0) {
       return 'Неопределенный';
     }
-    
+
     const commercialCount = organicResults.filter(r => r.pageType === 'Коммерческая').length;
     const ratio = commercialCount / organicResults.length;
-    
+
     if (ratio > 0.4 && ratio <= 0.6) {
       return 'Полукоммерческий';
     } else if (ratio <= 0.4) {

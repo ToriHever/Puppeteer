@@ -3,6 +3,7 @@ import { readFile, writeFile, access, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import readline from 'readline';
 import path from 'path';
+import { detectQueryIntentByKeywords } from '../utils/queryIntent.js';
 
 // Глобальная переменная для управления паузой
 let isPaused = false;
@@ -212,8 +213,14 @@ async function saveCookies(page, filename) {
   }
 }
 
-// Функция определения типа запроса на основе соотношения коммерческих и информационных страниц
+// Функция определения типа запроса.
+// Сначала — явные ключевые слова в тексте запроса ("купить", "что такое"),
+// это прямой сигнал. Если их нет — запасной вариант: доля коммерческих
+// страниц среди органики в выдаче.
 function determineQueryType(results, query) {
+  const byKeyword = detectQueryIntentByKeywords(query);
+  if (byKeyword) return byKeyword;
+
   // Фильтруем только органические результаты для данного запроса
   const organicResults = results.filter(r => r.query === query && r.type === 'Органика');
   
@@ -585,11 +592,36 @@ async function searchQuery(page, query) {
   const results = await page.evaluate((searchQuery) => {
       
     // Функция определения типа страницы
+    // ВАЖНО: раньше среди commercePatterns был '/' — он совпадает с ЛЮБЫМ
+    // http(s)-URL (там всегда есть хотя бы один слэш), из-за чего ветка
+    // 'Непонятная' была фактически недостижима, а почти все страницы,
+    // не попавшие в info-паттерны, автоматически считались коммерческими.
+    // Теперь URL разбирается на hostname/pathname, а главная страница
+    // домена (пустой путь) обрабатывается отдельным явным условием.
     function determinePageType(url) {
-      const lowerUrl = url.toLowerCase();
+      let hostname = '';
+      let pathname = '';
+      try {
+        const parsed = new URL(url);
+        hostname = parsed.hostname.toLowerCase();
+        pathname = parsed.pathname.toLowerCase();
+      } catch {
+        return 'Непонятная';
+      }
 
-      // Паттерны для информационных страниц
-      const infoPatterns = [
+      const infoDomains = [
+        'jetinfo.ru',
+        'xakep.ru',
+        'vc.ru',
+        'ru.hostings.info',
+        'pro-hosting.online',
+        'hostradar.ru',
+        'ru.tophosts.net',
+        'dtf.ru',
+        'medium.com',
+      ];
+
+      const infoPathPatterns = [
         '/blog',
         '/article',
         '/articles',
@@ -606,8 +638,6 @@ async function searchQuery(page, query) {
         '/advice',
         '/howto',
         '/how-to',
-        'id=',
-        '?p=',
         '/post',
         '/posts',
         '/story',
@@ -629,28 +659,17 @@ async function searchQuery(page, query) {
         '/technologies',
         '/kursfinder',
         '/actions',
-        'jetinfo.ru',
-        'xakep.ru',
-        'xakep.ru',
-        'vc.ru',
-        'ru.hostings.info',
-        'pro-hosting.online',
-        'hostradar.ru',
-        'ru.tophosts.net',
-        'dtf.ru',
-        'medium.com',
         '/press-centr'
       ];
 
-      // Проверяем наличие информационных паттернов
-      const isInfo = infoPatterns.some(pattern => lowerUrl.includes(pattern));
+      const isInfoDomain = infoDomains.some((d) => hostname === d || hostname.endsWith(`.${d}`));
+      if (isInfoDomain) return 'Информационная';
 
-      if (isInfo) {
-        return 'Информационная';
-      }
+      const isInfoPath = infoPathPatterns.some((p) => pathname.includes(p));
+      if (isInfoPath) return 'Информационная';
 
       // Паттерны для коммерческих страниц
-      const commercePatterns = [
+      const commercePathPatterns = [
         '/shop',
         '/store',
         '/buy',
@@ -668,15 +687,13 @@ async function searchQuery(page, query) {
         '/services',
         '/solutions',
         '/pricing',
-        '/',
         '/protection'
       ];
 
-      const isCommerce = commercePatterns.some(pattern => lowerUrl.includes(pattern));
+      const isCommercePath = commercePathPatterns.some((p) => pathname.includes(p));
+      if (isCommercePath) return 'Коммерческая';
 
-      if (isCommerce) {
-        return 'Коммерческая';
-      }
+      if (pathname === '' || pathname === '/') return 'Коммерческая';
 
       return 'Непонятная';
     }

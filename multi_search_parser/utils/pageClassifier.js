@@ -1,67 +1,7 @@
-// Паттерны для определения типа страницы
+// Паттерны для определения типа страницы по URL
 
-// Паттерны для информационных страниц
-export const INFO_PATTERNS = [
-  // Блоги и статьи
-  '/blog',
-  '/article',
-  '/articles',
-  '/post',
-  '/posts',
-  '/stati',
-  '/statya',
-  
-  // Новости
-  '/news',
-  '/novosti',
-  
-  // Справка и документация
-  '/help',
-  '/faq',
-  '/guide',
-  '/tutorial',
-  '/docs',
-  '/support',
-  'uploads',
-  'erp25doc',
-  'manuals',
-  
-  // Образовательный контент
-  '/wiki',
-  '/knowledge',
-  '/learn',
-  'education',
-  '/tips',
-  '/advice',
-  '/howto',
-  '/how-to',
-  
-  // Обзоры и аналитика
-  '/review',
-  '/reviews',
-  '/obzor',
-  '/analytics',
-  '/opinions',
-  
-  // Информационные разделы
-  '/info',
-  '/informacia',
-  '/story',
-  '/stories',
-  '/links',
-  '/press-centr',
-  
-  // Технологии
-  '/technology',
-  '/technologies',
-  '/kursfinder',
-  '/actions',
-  
-  // URL параметры
-  'id=',
-  '?p=',
-  
-  // Известные информационные домены
+// Известные информационные домены (сравниваются с hostname целиком, не подстрокой)
+export const INFO_DOMAINS = [
   'jetinfo.ru',
   'xakep.ru',
   'vc.ru',
@@ -78,81 +18,156 @@ export const INFO_PATTERNS = [
   'support.kaspersky.com',
   'base.garant.ru',
   'infowatch.ru',
-
 ];
 
-// Паттерны для коммерческих страниц
-export const COMMERCE_PATTERNS = [
+// Паттерны для информационных страниц (сравниваются с pathname)
+export const INFO_PATH_PATTERNS = [
+  // Блоги и статьи
+  '/blog',
+  '/article',
+  '/articles',
+  '/post',
+  '/posts',
+  '/stati',
+  '/statya',
+
+  // Новости
+  '/news',
+  '/novosti',
+
+  // Справка и документация
+  '/help',
+  '/faq',
+  '/guide',
+  '/tutorial',
+  '/docs',
+  '/support',
+  'uploads',
+  'erp25doc',
+  'manuals',
+
+  // Образовательный контент
+  '/wiki',
+  '/knowledge',
+  '/learn',
+  'education',
+  '/tips',
+  '/advice',
+  '/howto',
+  '/how-to',
+
+  // Обзоры и аналитика
+  '/review',
+  '/reviews',
+  '/obzor',
+  '/analytics',
+  '/opinions',
+
+  // Информационные разделы
+  '/info',
+  '/informacia',
+  '/story',
+  '/stories',
+  '/links',
+  '/press-centr',
+
+  // Технологии
+  '/technology',
+  '/technologies',
+  '/kursfinder',
+  '/actions',
+];
+
+// Паттерны для коммерческих страниц (сравниваются с pathname)
+// Раньше сюда входил '/' как «главная страница часто коммерческая» — но это
+// совпадало с ЛЮБЫМ URL (у каждого http(s)-адреса есть хотя бы один '/'),
+// из-за чего ветка «Непонятная» никогда не срабатывала. Главная страница
+// теперь обрабатывается отдельно, только когда путь реально пустой.
+export const COMMERCE_PATH_PATTERNS = [
   // Магазины и покупки
   '/shop',
   '/store',
   '/buy',
   '/kupit',
   '/magazin',
-  
+
   // Товары и каталоги
   '/product',
   '/catalog',
   '/tovar',
   '/katalog',
-  
+
   // Корзина и оформление
   '/cart',
   '/checkout',
   '/order',
   '/purchase',
-  
+
   // Цены и услуги
   '/price',
   '/pricing',
   '/services',
   '/solutions',
-  
+
   // Защита/безопасность (часто коммерческие предложения)
   '/protection',
-  
-  // Главная страница (часто коммерческая)
-  '/'
 ];
 
 /**
- * Определяет тип страницы на основе URL
+ * Определяет тип страницы на основе URL.
+ * Разбирает URL на hostname/pathname вместо подстрокового поиска по всей
+ * строке — иначе, например, '/blog' у 'https://shop.ru/catalog/blog-stand'
+ * ложно матчился бы как инфо-страница просто из-за совпадения символов.
  * @param {string} url - URL страницы
  * @returns {string} - 'Информационная', 'Коммерческая' или 'Непонятная'
  */
 export function determinePageType(url) {
   if (!url) return 'Непонятная';
-  
-  const lowerUrl = url.toLowerCase();
 
-  // Проверяем информационные паттерны
-  const isInfo = INFO_PATTERNS.some(pattern => lowerUrl.includes(pattern));
-  if (isInfo) return 'Информационная';
+  let hostname = '';
+  let pathname = '';
+  try {
+    const parsed = new URL(url);
+    hostname = parsed.hostname.toLowerCase();
+    pathname = parsed.pathname.toLowerCase();
+  } catch {
+    return 'Непонятная';
+  }
 
-  // Проверяем коммерческие паттерны
-  const isCommerce = COMMERCE_PATTERNS.some(pattern => lowerUrl.includes(pattern));
-  if (isCommerce) return 'Коммерческая';
+  const isInfoDomain = INFO_DOMAINS.some((d) => hostname === d || hostname.endsWith(`.${d}`));
+  if (isInfoDomain) return 'Информационная';
+
+  const isInfoPath = INFO_PATH_PATTERNS.some((p) => pathname.includes(p));
+  if (isInfoPath) return 'Информационная';
+
+  const isCommercePath = COMMERCE_PATH_PATTERNS.some((p) => pathname.includes(p));
+  if (isCommercePath) return 'Коммерческая';
+
+  // Настоящая главная страница домена (не подкаталог) — частый коммерческий
+  // лендинг. В отличие от старого паттерна '/', здесь матчится только
+  // реально пустой путь, а не любой URL.
+  if (pathname === '' || pathname === '/') return 'Коммерческая';
 
   return 'Непонятная';
 }
 
 /**
- * Добавляет новый паттерн в список информационных
+ * Добавляет новый паттерн в список информационных путей
  * @param {string} pattern - Паттерн для добавления
  */
 export function addInfoPattern(pattern) {
-  if (!INFO_PATTERNS.includes(pattern)) {
-    INFO_PATTERNS.push(pattern);
+  if (!INFO_PATH_PATTERNS.includes(pattern)) {
+    INFO_PATH_PATTERNS.push(pattern);
   }
 }
 
 /**
- * Добавляет новый паттерн в список коммерческих
+ * Добавляет новый паттерн в список коммерческих путей
  * @param {string} pattern - Паттерн для добавления
  */
 export function addCommercePattern(pattern) {
-  if (!COMMERCE_PATTERNS.includes(pattern)) {
-    COMMERCE_PATTERNS.push(pattern);
+  if (!COMMERCE_PATH_PATTERNS.includes(pattern)) {
+    COMMERCE_PATH_PATTERNS.push(pattern);
   }
 }
 

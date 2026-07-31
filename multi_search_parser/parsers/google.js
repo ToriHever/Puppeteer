@@ -1,6 +1,6 @@
 import BaseParser from './base.js';
 import { sleep } from '../utils/helpers.js';
-import { INFO_PATTERNS, COMMERCE_PATTERNS } from '../utils/pageClassifier.js';
+import { INFO_DOMAINS, INFO_PATH_PATTERNS, COMMERCE_PATH_PATTERNS } from '../utils/pageClassifier.js';
 
 class GoogleParser extends BaseParser {
   constructor() {
@@ -49,19 +49,35 @@ class GoogleParser extends BaseParser {
     await sleep(1000);
 
     // Извлекаем органические результаты
-    const results = await page.evaluate((searchQuery, infoPatterns, commercePatterns) => {
-      
-      // Функция определения типа страницы
+    const results = await page.evaluate((searchQuery, infoDomains, infoPathPatterns, commercePathPatterns) => {
+
+      // Функция определения типа страницы (см. utils/pageClassifier.js —
+      // здесь та же логика, продублированная, т.к. в page.evaluate можно
+      // передать только данные, а не импортировать функции)
       function determinePageType(url) {
         if (!url) return 'Непонятная';
-        const lowerUrl = url.toLowerCase();
-        
-        const isInfo = infoPatterns.some(pattern => lowerUrl.includes(pattern));
-        if (isInfo) return 'Информационная';
-        
-        const isCommerce = commercePatterns.some(pattern => lowerUrl.includes(pattern));
-        if (isCommerce) return 'Коммерческая';
-        
+
+        let hostname = '';
+        let pathname = '';
+        try {
+          const parsed = new URL(url);
+          hostname = parsed.hostname.toLowerCase();
+          pathname = parsed.pathname.toLowerCase();
+        } catch {
+          return 'Непонятная';
+        }
+
+        const isInfoDomain = infoDomains.some((d) => hostname === d || hostname.endsWith(`.${d}`));
+        if (isInfoDomain) return 'Информационная';
+
+        const isInfoPath = infoPathPatterns.some((p) => pathname.includes(p));
+        if (isInfoPath) return 'Информационная';
+
+        const isCommercePath = commercePathPatterns.some((p) => pathname.includes(p));
+        if (isCommercePath) return 'Коммерческая';
+
+        if (pathname === '' || pathname === '/') return 'Коммерческая';
+
         return 'Непонятная';
       }
       
@@ -223,7 +239,7 @@ class GoogleParser extends BaseParser {
       });
 
       return organicResults;
-    }, query, INFO_PATTERNS, COMMERCE_PATTERNS);
+    }, query, INFO_DOMAINS, INFO_PATH_PATTERNS, COMMERCE_PATH_PATTERNS);
 
     console.log(`  [${this.name}] 📊 Найдено ${results.length} результатов`);
     
