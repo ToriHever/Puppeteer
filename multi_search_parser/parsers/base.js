@@ -5,6 +5,7 @@ import { sleep, sleepWithPauseCheck, randomMouseMovement, waitForUserInput, sele
 import { isPaused, pauseMessage } from '../utils/hotkeys.js';
 import { detectQueryIntentByKeywords } from '../utils/queryIntent.js';
 import { takeSerpScreenshot } from '../utils/screenshot.js';
+import { saveSerpFeaturesToCSV } from '../utils/serpFeatures.js';
 
 export const MODES = {
   COOKIE: 'cookie',
@@ -21,6 +22,10 @@ export default class BaseParser {
     this.minResultsThreshold = 10;
     // Скриншот выдачи по каждому запросу — опция, включается по желанию
     this.screenshotsEnabled = !!options.screenshots;
+    // Анализ расширенных элементов выдачи (ИИ-обзор, картинки, видео,
+    // боковая панель, похожие вопросы) — тоже опция, включается по желанию
+    this.serpFeaturesEnabled = !!options.serpFeatures;
+    this.serpFeatureRows = [];
   }
 
   // Метод для получения конфигурации (переопределяется в наследниках)
@@ -33,6 +38,12 @@ export default class BaseParser {
     throw new Error('searchQuery() должен быть реализован в дочернем классе');
   }
 
+  // Определение расширенных элементов выдачи для текущей страницы
+  // (переопределяется в наследниках — у Yandex и Google разная разметка)
+  async detectSerpFeatures(page) {
+    throw new Error('detectSerpFeatures() должен быть реализован в дочернем классе');
+  }
+
   // Метод для получения путей к файлам
   getPaths() {
     return {
@@ -42,7 +53,8 @@ export default class BaseParser {
       incomplete: `./results/${this.name}/incomplete_queries.txt`,
       intermediateResults: `./results/${this.name}/results_intermediate.csv`,
       intermediateIncomplete: `./results/${this.name}/incomplete_queries_intermediate.txt`,
-      screenshots: `./results/${this.name}/screenshots`
+      screenshots: `./results/${this.name}/screenshots`,
+      serpFeatures: `./results/${this.name}/serp_features.csv`
     };
   }
 
@@ -103,6 +115,10 @@ export default class BaseParser {
       
       if (this.incompleteQueries.length > 0) {
         await saveIncompleteQueries(this.incompleteQueries, paths.intermediateIncomplete);
+      }
+
+      if (this.serpFeaturesEnabled && this.serpFeatureRows.length > 0) {
+        saveSerpFeaturesToCSV(this.serpFeatureRows, paths.serpFeatures);
       }
     } catch (error) {
       console.error(`[${this.name}] Ошибка при сохранении промежуточных результатов:`, error.message);
@@ -225,6 +241,18 @@ export default class BaseParser {
             }
           }
 
+          // Анализ расширенных элементов выдачи — опционально (this.serpFeaturesEnabled)
+          if (this.serpFeaturesEnabled) {
+            try {
+              const features = await this.detectSerpFeatures(page);
+              this.serpFeatureRows.push({ query, ...features, checkedAt: new Date().toISOString() });
+              const found = Object.entries(features).filter(([, v]) => v).map(([k]) => k);
+              console.log(`${pauseMessage()}[${this.name}] 🧩 Расширенные элементы: ${found.length ? found.join(', ') : 'нет'}`);
+            } catch (featuresError) {
+              console.warn(`[${this.name}] ⚠️ Не удалось определить расширенные элементы: ${featuresError.message}`);
+            }
+          }
+
           // Случайная задержка между запросами
           const delay = 2000 + Math.random() * 3000;
           console.log(`${pauseMessage()}[${this.name}] ⏱ Пауза ${Math.round(delay / 1000)} сек с имитацией движения мыши...`);
@@ -243,7 +271,13 @@ export default class BaseParser {
       // Сохраняем результаты
       const resultsWithQueryType = this.addQueryTypeToResults(this.results);
       await saveToCSV(resultsWithQueryType, paths.results, this.name);
-      
+
+      // Сохраняем данные о расширенных элементах выдачи, если включено
+      if (this.serpFeaturesEnabled && this.serpFeatureRows.length > 0) {
+        saveSerpFeaturesToCSV(this.serpFeatureRows, paths.serpFeatures);
+        console.log(`[${this.name}] 🧩 Расширенные элементы выдачи сохранены в: ${paths.serpFeatures}`);
+      }
+
       console.log(`\n[${this.name}] ✓ Парсинг завершен! Результаты сохранены в: ${paths.results}`);
       console.log(`  Режим работы: ${this.mode === MODES.COOKIE ? '🍪 С куками' : '🕶️ Инкогнито'}`);
       console.log(`  Всего обработано запросов: ${queries.length}`);

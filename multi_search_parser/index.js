@@ -89,6 +89,38 @@ function selectScreenshotOption() {
   });
 }
 
+// Флаг анализа расширенных элементов выдачи: --serp-features / --no-serp-features
+function parseSerpFeaturesArg() {
+  const args = process.argv.slice(2);
+  if (args.includes('--serp-features')) return true;
+  if (args.includes('--no-serp-features')) return false;
+  return null;
+}
+
+// Интерактивный вопрос: анализировать ли расширенные элементы выдачи
+function selectSerpFeaturesOption() {
+  return new Promise((resolve) => {
+    console.log('\n🧩 Анализировать расширенные элементы выдачи (ИИ-обзор, картинки, видео, боковая панель, похожие вопросы)?');
+    console.log('   (сохраняются в results/<движок>/serp_features.csv)');
+    console.log('1. Да');
+    console.log('2. Нет\n');
+    console.log('Выберите (1 или 2): ');
+
+    let resolved = false;
+    const onKeypress = (str) => {
+      if (!resolved && (str === '1' || str === '2')) {
+        resolved = true;
+        process.stdin.removeListener('keypress', onKeypress);
+        const enabled = str === '1';
+        console.log(`\n✓ Анализ расширенных элементов: ${enabled ? 'включён' : 'выключен'}\n`);
+        resolve(enabled);
+      }
+    };
+
+    process.stdin.on('keypress', onKeypress);
+  });
+}
+
 // Главная функция
 async function main() {
   let yandexParser;
@@ -123,7 +155,11 @@ async function main() {
 
     const screenshotArg = parseScreenshotArg();
     const screenshotsEnabled = screenshotArg !== null ? screenshotArg : await selectScreenshotOption();
-    const parserOptions = { screenshots: screenshotsEnabled };
+
+    const serpFeaturesArg = parseSerpFeaturesArg();
+    const serpFeaturesEnabled = serpFeaturesArg !== null ? serpFeaturesArg : await selectSerpFeaturesOption();
+
+    const parserOptions = { screenshots: screenshotsEnabled, serpFeatures: serpFeaturesEnabled };
 
     switch(choice) {
       case '1':

@@ -1,6 +1,7 @@
 import BaseParser from './base.js';
 import { sleep } from '../utils/helpers.js';
 import { INFO_DOMAINS, INFO_PATH_PATTERNS, COMMERCE_PATH_PATTERNS } from '../utils/pageClassifier.js';
+import { detectGoogleSerpFeatures } from '../utils/serpFeatures.js';
 
 class GoogleParser extends BaseParser {
   constructor(options = {}) {
@@ -18,6 +19,10 @@ class GoogleParser extends BaseParser {
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8'
       }
     };
+  }
+
+  async detectSerpFeatures(page) {
+    return detectGoogleSerpFeatures(page);
   }
 
   async searchQuery(page, query) {
