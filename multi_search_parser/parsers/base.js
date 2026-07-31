@@ -4,6 +4,7 @@ import { configureBrowser } from '../utils/browser.js';
 import { sleep, sleepWithPauseCheck, randomMouseMovement, waitForUserInput, selectMode } from '../utils/helpers.js';
 import { isPaused, pauseMessage } from '../utils/hotkeys.js';
 import { detectQueryIntentByKeywords } from '../utils/queryIntent.js';
+import { takeSerpScreenshot } from '../utils/screenshot.js';
 
 export const MODES = {
   COOKIE: 'cookie',
@@ -11,13 +12,15 @@ export const MODES = {
 };
 
 export default class BaseParser {
-  constructor(name) {
+  constructor(name, options = {}) {
     this.name = name;
     this.results = [];
     this.incompleteQueries = [];
     this.browser = null;
     this.mode = null;
     this.minResultsThreshold = 10;
+    // Скриншот выдачи по каждому запросу — опция, включается по желанию
+    this.screenshotsEnabled = !!options.screenshots;
   }
 
   // Метод для получения конфигурации (переопределяется в наследниках)
@@ -38,7 +41,8 @@ export default class BaseParser {
       results: `./results/${this.name}/results.csv`,
       incomplete: `./results/${this.name}/incomplete_queries.txt`,
       intermediateResults: `./results/${this.name}/results_intermediate.csv`,
-      intermediateIncomplete: `./results/${this.name}/incomplete_queries_intermediate.txt`
+      intermediateIncomplete: `./results/${this.name}/incomplete_queries_intermediate.txt`,
+      screenshots: `./results/${this.name}/screenshots`
     };
   }
 
@@ -209,6 +213,16 @@ export default class BaseParser {
           } else {
             console.log(`${pauseMessage()}[${this.name}] ✓ Найдено ${searchResults.length} результатов`);
             this.results.push(...searchResults);
+          }
+
+          // Скриншот текущей выдачи — опционально (this.screenshotsEnabled)
+          if (this.screenshotsEnabled) {
+            try {
+              const shotPath = await takeSerpScreenshot(page, query, paths.screenshots);
+              console.log(`${pauseMessage()}[${this.name}] 📸 Скриншот сохранён: ${shotPath}`);
+            } catch (shotError) {
+              console.warn(`[${this.name}] ⚠️ Не удалось сохранить скриншот: ${shotError.message}`);
+            }
           }
 
           // Случайная задержка между запросами

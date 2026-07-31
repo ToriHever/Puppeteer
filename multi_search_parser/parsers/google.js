@@ -3,8 +3,8 @@ import { sleep } from '../utils/helpers.js';
 import { INFO_DOMAINS, INFO_PATH_PATTERNS, COMMERCE_PATH_PATTERNS } from '../utils/pageClassifier.js';
 
 class GoogleParser extends BaseParser {
-  constructor() {
-    super('google');
+  constructor(options = {}) {
+    super('google', options);
     // Google иногда показывает меньше результатов, снижаем порог
     this.minResultsThreshold = 5;
   }

@@ -41,7 +41,7 @@ function selectSearchEngine() {
 function parseArgs() {
   const args = process.argv.slice(2);
   const engineArg = args.find(arg => arg.startsWith('--engine='));
-  
+
   if (engineArg) {
     const engine = engineArg.split('=')[1];
     const mapping = {
@@ -52,8 +52,41 @@ function parseArgs() {
     };
     return mapping[engine];
   }
-  
+
   return null;
+}
+
+// Флаг скриншотов из командной строки: --screenshots / --no-screenshots.
+// Возвращает true/false, если флаг передан явно, иначе null (спросим интерактивно).
+function parseScreenshotArg() {
+  const args = process.argv.slice(2);
+  if (args.includes('--screenshots')) return true;
+  if (args.includes('--no-screenshots')) return false;
+  return null;
+}
+
+// Интерактивный вопрос: делать ли скриншоты выдачи по каждому запросу
+function selectScreenshotOption() {
+  return new Promise((resolve) => {
+    console.log('\n📸 Делать скриншоты выдачи по каждому запросу?');
+    console.log('   (сохраняются в results/<движок>/screenshots/, подпись: "запрос ДД ММ ГГГГ")');
+    console.log('1. Да');
+    console.log('2. Нет\n');
+    console.log('Выберите (1 или 2): ');
+
+    let resolved = false;
+    const onKeypress = (str) => {
+      if (!resolved && (str === '1' || str === '2')) {
+        resolved = true;
+        process.stdin.removeListener('keypress', onKeypress);
+        const enabled = str === '1';
+        console.log(`\n✓ Скриншоты: ${enabled ? 'включены' : 'выключены'}\n`);
+        resolve(enabled);
+      }
+    };
+
+    process.stdin.on('keypress', onKeypress);
+  });
 }
 
 // Главная функция
@@ -88,42 +121,46 @@ async function main() {
     const argChoice = parseArgs();
     const choice = argChoice || await selectSearchEngine();
 
+    const screenshotArg = parseScreenshotArg();
+    const screenshotsEnabled = screenshotArg !== null ? screenshotArg : await selectScreenshotOption();
+    const parserOptions = { screenshots: screenshotsEnabled };
+
     switch(choice) {
       case '1':
         console.log('🔍 Запуск парсера Yandex...\n');
-        yandexParser = new YandexParser();
+        yandexParser = new YandexParser(parserOptions);
         await yandexParser.parse();
         break;
-        
+
       case '2':
         console.log('🔍 Запуск парсера Google...\n');
-        googleParser = new GoogleParser();
+        googleParser = new GoogleParser(parserOptions);
         await googleParser.parse();
         break;
-        
+
       case '3':
         console.log('🔍 Запуск парсеров последовательно...\n');
-        
+
         console.log('═══════════════════════════════════════');
         console.log('ЭТАП 1: Парсинг Yandex');
         console.log('═══════════════════════════════════════\n');
-        yandexParser = new YandexParser();
+        yandexParser = new YandexParser(parserOptions);
         await yandexParser.parse();
-        
+
         console.log('\n═══════════════════════════════════════');
         console.log('ЭТАП 2: Парсинг Google');
         console.log('═══════════════════════════════════════\n');
-        googleParser = new GoogleParser();
+        googleParser = new GoogleParser(parserOptions);
         await googleParser.parse();
         break;
-        
+
       case '4':
         console.log('🔍 Запуск парсеров параллельно...\n');
         console.log('⚠️ ВНИМАНИЕ: Параллельный режим требует больше ресурсов\n');
-        
-        yandexParser = new YandexParser();
-        googleParser = new GoogleParser();
-        
+
+        yandexParser = new YandexParser(parserOptions);
+        googleParser = new GoogleParser(parserOptions);
+
         await Promise.all([
           yandexParser.parse(),
           googleParser.parse()

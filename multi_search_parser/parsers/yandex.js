@@ -3,8 +3,8 @@ import { sleep } from '../utils/helpers.js';
 import { INFO_DOMAINS, INFO_PATH_PATTERNS, COMMERCE_PATH_PATTERNS } from '../utils/pageClassifier.js';
 
 class YandexParser extends BaseParser {
-  constructor() {
-    super('yandex');
+  constructor(options = {}) {
+    super('yandex', options);
   }
 
   getConfig() {
