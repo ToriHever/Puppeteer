@@ -1,8 +1,11 @@
-import puppeteer from 'puppeteer';
+import puppeteer from 'puppeteer-extra';
+import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { readQueries, readCookies, saveCookies, saveToCSV, saveIncompleteQueries } from '../utils/files.js';
 import { configureBrowser } from '../utils/browser.js';
 import { sleep, sleepWithPauseCheck, randomMouseMovement, waitForUserInput, selectMode } from '../utils/helpers.js';
 import { isPaused, pauseMessage } from '../utils/hotkeys.js';
+
+puppeteer.use(StealthPlugin());
 
 export const MODES = {
   COOKIE: 'cookie',
