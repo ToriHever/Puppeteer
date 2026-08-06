@@ -36,13 +36,22 @@ function stats(values) {
   };
 }
 
-// Агрегирует частоты лемм и длину текста по страницам конкурентов
-export function aggregateCompetitors(competitorPages) {
+// Возвращает множество лемм из токенов { word, lemma }, без фильтрации стоп-слов —
+// используется для вручную помеченных главных/LSI-слов из query.txt
+export function lemmasFromTokens(tokens) {
+  return new Set(tokens.map(t => t.lemma));
+}
+
+// Агрегирует частоты лемм и длину текста по страницам конкурентов.
+// forcedLemmas — леммы, которые нужно включить в отчёт независимо от порога покрытия
+// (вручную помеченные главные/LSI-слова из query.txt)
+export function aggregateCompetitors(competitorPages, forcedLemmas = new Set()) {
   // competitorPages: [{ url, lemmaFreq: Map, wordCount, charCount }]
   const allLemmas = new Set();
   for (const page of competitorPages) {
     for (const lemma of page.lemmaFreq.keys()) allLemmas.add(lemma);
   }
+  for (const lemma of forcedLemmas) allLemmas.add(lemma);
 
   const lemmaStats = new Map();
   const minCoverage = Math.ceil(competitorPages.length * LEMMA_MIN_COVERAGE_RATIO);
@@ -50,7 +59,7 @@ export function aggregateCompetitors(competitorPages) {
   for (const lemma of allLemmas) {
     const counts = competitorPages.map(p => p.lemmaFreq.get(lemma) || 0);
     const coverage = counts.filter(c => c > 0).length;
-    if (coverage < minCoverage) continue; // отфильтровываем редкие/шумовые леммы
+    if (coverage < minCoverage && !forcedLemmas.has(lemma)) continue; // отфильтровываем редкие/шумовые леммы
 
     lemmaStats.set(lemma, { ...stats(counts), coverage, totalPages: competitorPages.length });
   }
@@ -73,14 +82,17 @@ function classifyByRange(value, { min, max }) {
   return 'Норма';
 }
 
-// Сравнивает свою страницу с агрегированной статистикой ТОП-10
-export function compareOwnPage(ownPage, aggregated) {
+// Сравнивает свою страницу с агрегированной статистикой ТОП-10.
+// markedLemmas — леммы главных/LSI-слов, вручную заданных в query.txt: { main: Set, lsi: Set }
+export function compareOwnPage(ownPage, aggregated, markedLemmas = { main: new Set(), lsi: new Set() }) {
   const lemmaComparison = [];
 
   for (const [lemma, competitorStat] of aggregated.lemmaStats.entries()) {
     const ownCount = ownPage.lemmaFreq.get(lemma) || 0;
+    const importance = markedLemmas.main.has(lemma) ? 'Главное' : markedLemmas.lsi.has(lemma) ? 'LSI' : '';
     lemmaComparison.push({
       lemma,
+      importance,
       ownCount,
       minCompetitor: competitorStat.min,
       avgCompetitor: Number(competitorStat.avg.toFixed(1)),
@@ -91,8 +103,12 @@ export function compareOwnPage(ownPage, aggregated) {
     });
   }
 
-  // Сортируем: сначала недо/переоптимизированные леммы (самое полезное для правок)
+  // Сортируем: сначала вручную помеченные слова (Главное, потом LSI), внутри группы — недо/переоптимизированные
   lemmaComparison.sort((a, b) => {
+    const importanceRank = { 'Главное': 0, 'LSI': 1, '': 2 };
+    if (importanceRank[a.importance] !== importanceRank[b.importance]) {
+      return importanceRank[a.importance] - importanceRank[b.importance];
+    }
     const rank = { 'Недостаточно': 0, 'Избыточно': 1, 'Норма': 2 };
     return rank[a.recommendation] - rank[b.recommendation];
   });

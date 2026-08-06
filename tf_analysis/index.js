@@ -8,7 +8,7 @@ import { readInputTasks } from './utils/inputFolders.js';
 import { saveLemmaReport, saveSummaryReport, slugifyQuery } from './utils/report.js';
 import { fetchPageText } from './lib/fetchPageText.js';
 import { lemmatizeText } from './lib/lemmatizer.js';
-import { buildLemmaFreq, aggregateCompetitors, compareOwnPage } from './lib/tfStats.js';
+import { buildLemmaFreq, aggregateCompetitors, compareOwnPage, lemmasFromTokens } from './lib/tfStats.js';
 import { RESULTS_DIR, INPUT_DIR } from './config.js';
 
 async function analyzePage(page, source) {
@@ -18,7 +18,14 @@ async function analyzePage(page, source) {
   return { source, lemmaFreq, wordCount: pageText.wordCount, charCount: pageText.charCount };
 }
 
-async function runTask(page, { query, folder, ownPath, competitorPaths }) {
+// Лемматизирует вручную заданные фразы (главные/LSI-слова из query.txt) и возвращает множество их лемм
+async function lemmasOfPhrases(phrases) {
+  if (!phrases || phrases.length === 0) return new Set();
+  const tokens = await lemmatizeText(phrases.join('. '));
+  return lemmasFromTokens(tokens);
+}
+
+async function runTask(page, { query, folder, ownPath, competitorPaths, mainPhrases, lsiPhrases }) {
   console.log(`\n┌─────────────────────────────────────────`);
   console.log(`│ Запрос: "${query}" (папка: ${folder})`);
   console.log(`│ Конкурентов: ${competitorPaths.length}`);
@@ -48,8 +55,16 @@ async function runTask(page, { query, folder, ownPath, competitorPaths }) {
     return;
   }
 
-  const aggregated = aggregateCompetitors(competitorPages);
-  const { lemmaComparison, lengthSummary } = compareOwnPage(ownPage, aggregated);
+  const [mainLemmas, lsiLemmas] = await Promise.all([
+    lemmasOfPhrases(mainPhrases),
+    lemmasOfPhrases(lsiPhrases)
+  ]);
+  const markedLemmas = { main: mainLemmas, lsi: lsiLemmas };
+  console.log(`  Главных слов: ${mainLemmas.size}, LSI-слов: ${lsiLemmas.size}`);
+
+  const forcedLemmas = new Set([...mainLemmas, ...lsiLemmas]);
+  const aggregated = aggregateCompetitors(competitorPages, forcedLemmas);
+  const { lemmaComparison, lengthSummary } = compareOwnPage(ownPage, aggregated, markedLemmas);
 
   const slug = slugifyQuery(query);
   const dir = path.join(RESULTS_DIR, slug);
@@ -68,8 +83,8 @@ async function main() {
   }
 
   const browser = await puppeteer.launch({
-    headless: false,
-    args: ['--no-sandbox', '--start-maximized', '--disable-blink-features=AutomationControlled']
+    headless: true,
+    args: ['--no-sandbox', '--disable-blink-features=AutomationControlled']
   });
 
   try {
