@@ -11,7 +11,7 @@ node_modules/
 !package-lock.json
 !**/package-lock.json
 
-# Результаты парсинга
+# Результаты парсинга (папки — разные парсеры называют их по-разному)
 Results/
 **/Results/
 Parser_*/Results/
@@ -19,6 +19,33 @@ Parser_*/Results/
 Result/
 **/Result/
 */result/
+screenshots/
+**/screenshots/
+
+# Результаты парсинга (отдельные файлы — не все парсеры кладут вывод в папку)
+result.csv
+**/result.csv
+results.csv
+**/results.csv
+results_*.csv
+**/results_*.csv
+errors_*.csv
+**/errors_*.csv
+search_urls_*.csv
+**/search_urls_*.csv
+meta_data*.csv
+**/meta_data*.csv
+serp_features.csv
+**/serp_features.csv
+unisender_*.csv
+**/unisender_*.csv
+**/contacts.csv
+incomplete_queries*.txt
+**/incomplete_queries*.txt
+
+# Отладочные дампы (HTML/скриншоты для диагностики парсеров)
+debug/
+**/debug/
 
 # Логи
 *.log
