@@ -73,3 +73,14 @@ tf_analysis/input/*
 
 # Бинарник Mystem (скачивается вручную, см. tf_analysis/README.md)
 tf_analysis/bin/
+
+# Дебаги
+google_ddosguard/debug/*
+
+
+# Списки к проверке
+Parser_Meta/urls_meta.txt
+Parser_domen/domens.txt
+Parser_request/requests.txt
+multi_search_parser/scripts/queries.txt
+
