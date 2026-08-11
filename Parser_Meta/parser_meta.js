@@ -17,6 +17,7 @@ const __dirname = path.dirname(__filename);
 const CONFIG = {
     INPUT_FILE: path.join(__dirname, 'urls_meta.txt'),
     OUTPUT_DIR: path.join(__dirname, 'Result'),
+    SCREENSHOTS_DIR: path.join(__dirname, 'Result', 'screenshots'),
     BROWSER_HEADLESS: false, // При капче нужен видимый браузер
     TIMEOUT: 30000,
     PARALLEL_LIMIT: 5,
@@ -58,6 +59,9 @@ let captchaPage = null;    // Страница с капчей
 // ============================================================
 if (!fs.existsSync(CONFIG.OUTPUT_DIR)) {
     fs.mkdirSync(CONFIG.OUTPUT_DIR, { recursive: true });
+}
+if (!fs.existsSync(CONFIG.SCREENSHOTS_DIR)) {
+    fs.mkdirSync(CONFIG.SCREENSHOTS_DIR, { recursive: true });
 }
 
 // ============================================================
@@ -211,6 +215,50 @@ async function checkForCaptcha(page) {
 }
 
 // ============================================================
+// СКРИНШОТ И РЕДИРЕКТЫ
+// ============================================================
+
+// Безопасное имя файла из URL: example.com/path -> example.com_path
+function urlToFilename(url) {
+    const clean = url.replace(/^https?:\/\//i, '').replace(/[^a-zA-Zа-яА-Я0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    return (clean || 'page').slice(0, 120);
+}
+
+// Полный скриншот страницы, путь возвращается относительно OUTPUT_DIR (для CSV)
+async function takeScreenshot(page, url) {
+    try {
+        const filename = `${urlToFilename(url)}.png`;
+        const fullPath = path.join(CONFIG.SCREENSHOTS_DIR, filename);
+        await page.screenshot({ path: fullPath, fullPage: true });
+        return path.join('screenshots', filename);
+    } catch (e) {
+        return '';
+    }
+}
+
+// Разбирает цепочку редиректов puppeteer: response.request().redirectChain()
+// Возвращает: было ли, коды всех хопов, и итоговый URL после всех редиректов
+function extractRedirectInfo(response, requestedUrl) {
+    if (!response) {
+        return { hadRedirect: false, redirectStatus: '', finalUrl: requestedUrl };
+    }
+
+    const chain = response.request().redirectChain();
+    const finalUrl = response.url();
+
+    if (chain.length === 0) {
+        return { hadRedirect: false, redirectStatus: '', finalUrl };
+    }
+
+    const redirectStatus = chain
+        .map((req) => req.response()?.status())
+        .filter(Boolean)
+        .join(' → ');
+
+    return { hadRedirect: true, redirectStatus, finalUrl };
+}
+
+// ============================================================
 // СКРАПИНГ МЕТА-ИНФОРМАЦИИ
 // ============================================================
 async function scrapeMeta(url, browser) {
@@ -228,6 +276,7 @@ async function scrapeMeta(url, browser) {
         });
 
         const statusCode = response?.status() || 0;
+        const { hadRedirect, redirectStatus, finalUrl } = extractRedirectInfo(response, url);
 
         // Небольшая пауза для полной загрузки динамического контента
         await delay(800);
@@ -298,6 +347,9 @@ async function scrapeMeta(url, browser) {
                 // Не смогли получить мету после капчи
             }
 
+            // Скриншот делаем с видимой страницы, пока капча уже пройдена
+            const screenshotCaptcha = await takeScreenshot(visiblePage || page, url);
+
             // Закрываем видимый браузер (если открывали отдельный)
             if (visibleBrowser && visibleBrowser !== browser) {
                 await visibleBrowser.close().catch(() => {});
@@ -309,6 +361,10 @@ async function scrapeMeta(url, browser) {
                 return {
                     url,
                     statusCode,
+                    hadRedirect,
+                    redirectStatus,
+                    finalUrl,
+                    screenshot: screenshotCaptcha,
                     success: true,
                     captcha: true,
                     ...metaFromCaptchaPage
@@ -318,6 +374,10 @@ async function scrapeMeta(url, browser) {
             return {
                 url,
                 statusCode,
+                hadRedirect,
+                redirectStatus,
+                finalUrl,
+                screenshot: screenshotCaptcha,
                 success: false,
                 captcha: true,
                 error: 'Капча — данные не получены',
@@ -348,22 +408,33 @@ async function scrapeMeta(url, browser) {
             };
         });
 
+        const screenshot = await takeScreenshot(page, url);
+
         await page.close();
 
         return {
             url,
             statusCode,
+            hadRedirect,
+            redirectStatus,
+            finalUrl,
+            screenshot,
             success: true,
             captcha: false,
             ...meta
         };
 
     } catch (error) {
+        const screenshot = await takeScreenshot(page, url);
         await page.close().catch(() => {});
 
         return {
             url,
             statusCode: 0,
+            hadRedirect: false,
+            redirectStatus: '',
+            finalUrl: url,
+            screenshot,
             success: false,
             captcha: false,
             error: error.message,
@@ -505,8 +576,12 @@ async function saveToCSV(data) {
     const filename = path.join(CONFIG.OUTPUT_DIR, `meta_data_${timestamp}.csv`);
 
     const headers = [
-        { id: 'url',         title: 'URL' },
-        { id: 'statusCode',  title: 'Код ответа' },
+        { id: 'url',            title: 'URL' },
+        { id: 'statusCode',     title: 'Код ответа' },
+        { id: 'hadRedirect',    title: 'Редирект' },
+        { id: 'redirectStatus', title: 'Код редиректа' },
+        { id: 'finalUrl',       title: 'Страница после редиректа' },
+        { id: 'screenshot',     title: 'Скриншот' },
         { id: 'captcha',     title: 'Капча' },
         { id: 'title',       title: 'Title' },
         { id: 'description', title: 'Description' },
@@ -527,10 +602,13 @@ async function saveToCSV(data) {
         encoding: 'utf8'
     });
 
-    // Преобразуем boolean captcha в читаемый текст
+    // Преобразуем boolean-поля в читаемый текст
     const preparedData = data.map(row => ({
         ...row,
         captcha: row.captcha ? 'Да' : '',
+        hadRedirect: row.hadRedirect ? 'Да' : 'Нет',
+        redirectStatus: row.redirectStatus || '',
+        finalUrl: row.hadRedirect ? (row.finalUrl || '') : '',
         error: row.error || '',
     }));
 

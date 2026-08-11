@@ -11,8 +11,8 @@ const __dirname  = path.dirname(__filename);
 // ═══════════════════════════════════════════════
 //  КОНФИГУРАЦИЯ
 // ═══════════════════════════════════════════════
-
-const SEARCH_QUERY = '"DDoS-Guard" -site:ddos-guard.net -site:ddos-guard.ru';
+const SEARCH_QUERY = 'site:softline.ru/blog/ ddos';
+// const SEARCH_QUERY = '"DDoS-Guard" -site:ddos-guard.net -site:ddos-guard.ru';
 
 const CONFIG = {
   userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',

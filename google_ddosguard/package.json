@@ -1,0 +1,13 @@
+{
+  "name": "google-ddosguard-parser",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Парсер Google SERP по запросу DDoS-Guard",
+  "main": "parser.js",
+  "scripts": {
+    "start": "node parser.js"
+  },
+  "dependencies": {
+    "puppeteer": "^24.10.1"
+  }
+}
