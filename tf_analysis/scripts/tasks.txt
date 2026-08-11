@@ -1,0 +1,5 @@
+# Формат: запрос;;URL_своей_страницы
+# Пример:
+# защита от ddos атак;;https://example.com/ddos-protection
+
+защита сайта от ddos;;https://ddos-guard.ru/web-protection

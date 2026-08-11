@@ -1,0 +1,10 @@
+{
+  "name": "tf-analysis",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "TF-анализ страницы против ТОП-10 Google/Яндекс для SEO-текстовой оптимизации",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  }
+}

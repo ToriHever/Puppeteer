@@ -6,6 +6,10 @@ node_modules/
 
 # Куки и сессии
 *.json
+!package.json
+!**/package.json
+!package-lock.json
+!**/package-lock.json
 
 # Результаты парсинга
 Results/
@@ -35,3 +39,10 @@ Thumbs.db
 temp/
 
 */requests.txt
+
+# Сохранённые вручную HTML для tf_analysis
+tf_analysis/input/*
+!tf_analysis/input/.gitkeep
+
+# Бинарник Mystem (скачивается вручную, см. tf_analysis/README.md)
+tf_analysis/bin/
