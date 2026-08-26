@@ -50,6 +50,13 @@ const COOKIES_FILE = path.join(SCRIPT_DIR, 'scripts', 'cookies', 'google.json');
 
 // ─── ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ──────────────────────────────────────────────────
 
+// Если строка — голый домен без протокола (например "example.ru" или
+// "example.ru/path"), добавляем https://, иначе page.goto() падает —
+// Puppeteer не принимает URL без схемы.
+function ensureProtocol(url) {
+  return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+}
+
 function loadPages(filePath) {
   const abs = path.resolve(SCRIPT_DIR, filePath);
   if (!fs.existsSync(abs)) {
@@ -59,7 +66,8 @@ function loadPages(filePath) {
   const lines = fs.readFileSync(abs, 'utf8')
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l && !l.startsWith('#'));
+    .filter((l) => l && !l.startsWith('#'))
+    .map(ensureProtocol);
   console.log(`📋 Загружено строк из ${filePath}: ${lines.length}`);
   return lines;
 }
