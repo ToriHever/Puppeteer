@@ -39,6 +39,9 @@ const CONFIG = {
   searchPagesCount: 10,          // сколько страниц выдачи просматривать по умолчанию
   minSearchResultsThreshold: 3,  // меньше — считаем, что это капча/блокировка
   searchPageDelay: [1500, 3500], // пауза между страницами выдачи, мс
+  // Режим «домены × слова» (приоритетный, см. resolveDomainsAndWords)
+  domainsFile: 'domains.txt',
+  wordsFile: 'words.txt',
 };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -59,6 +62,30 @@ function loadPages(filePath) {
     .filter((l) => l && !l.startsWith('#'));
   console.log(`📋 Загружено строк из ${filePath}: ${lines.length}`);
   return lines;
+}
+
+// Как loadPages, но не падает, если файла нет — возвращает пустой список
+// (используется для опциональных domains.txt/words.txt)
+function loadOptionalList(filePath) {
+  const abs = path.resolve(SCRIPT_DIR, filePath);
+  if (!fs.existsSync(abs)) return [];
+  return fs.readFileSync(abs, 'utf8')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'));
+}
+
+// domains.txt может содержать как "example.ru", так и "https://example.ru/path" —
+// для оператора site: нужен именно голый хост
+function normalizeDomainForSiteSearch(raw) {
+  return raw.trim().replace(/^https?:\/\//i, '').split('/')[0];
+}
+
+// Собирает поисковый запрос вида: site:example.ru "защита от ddos"
+// (многословные фразы берём в кавычки — точный поиск фразы, а не отдельных слов)
+function buildSiteQuery(domain, word) {
+  const phrase = word.includes(' ') ? `"${word}"` : word;
+  return `site:${domain} ${phrase}`;
 }
 
 // Возвращает hostname из URL или null если URL невалидный
@@ -117,7 +144,9 @@ function ensureResultsDir() {
 // ─── CSV ──────────────────────────────────────────────────────────────────────
 
 function initCSV(linksPath, errorsPath) {
-  fs.writeFileSync(linksPath, 'source_page,link_url,link_text,matched_domain,page_date,snippet_date,checked_at\n', 'utf8');
+  // "matched" — домен (режим pages.txt/query), "текстовое упоминание" или
+  // конкретное слово из words.txt (режим domains.txt+words.txt), в зависимости от режима
+  fs.writeFileSync(linksPath, 'source_page,link_url,link_text,matched,page_date,snippet_date,checked_at\n', 'utf8');
   fs.writeFileSync(errorsPath, 'source_page,error_type,error_detail,checked_at\n', 'utf8');
 }
 
@@ -163,8 +192,15 @@ async function delay(ms) {
 
 // ─── ПОИСК ТЕКСТОВЫХ УПОМИНАНИЙ ───────────────────────────────────────────────
 
-async function findTextMentions(page) {
-  return page.evaluate((patterns) => {
+// Ищет на странице текст, совпадающий с одним из patternSources (regex-источники,
+// без учёта регистра). По умолчанию пропускает совпадения внутри <a> (чтобы не
+// дублировать то, что уже поймано отдельным сканом ссылок в старом режиме) —
+// skipInsideLinks: false заставляет учитывать и такие совпадения, дополнительно
+// возвращая href той ссылки (нужно для режима «домены × слова», где ссылка,
+// содержащая слово в тексте, — и есть искомый результат).
+// Возвращает массив { context, patternIndex, linkHref }.
+async function findTextMentions(page, patternSources, { skipInsideLinks = true } = {}) {
+  return page.evaluate((patterns, skipInside) => {
     const results = [];
 
     const walker = document.createTreeWalker(
@@ -178,31 +214,43 @@ async function findTextMentions(page) {
       const text = node.textContent.trim();
       if (!text) continue;
 
-      const matchedPattern = patterns.some((p) => new RegExp(p, 'i').test(text));
-      if (!matchedPattern) continue;
+      const patternIndex = patterns.findIndex((p) => new RegExp(p, 'i').test(text));
+      if (patternIndex === -1) continue;
 
-      // Пропускаем если узел находится внутри <a>
+      // Ищем, находится ли узел внутри <a>, и запоминаем саму ссылку
       let parent = node.parentElement;
-      let insideLink = false;
+      let linkEl = null;
       while (parent && parent !== document.body) {
         if (parent.tagName === 'A') {
-          insideLink = true;
+          linkEl = parent;
           break;
         }
         parent = parent.parentElement;
       }
-      if (insideLink) continue;
+      if (linkEl && skipInside) continue;
 
       const blockParent = node.parentElement;
       const context = blockParent
         ? blockParent.innerText.trim().slice(0, 300)
         : text.slice(0, 300);
 
-      results.push(context);
+      results.push({ context, patternIndex, linkHref: linkEl ? linkEl.href : '' });
     }
 
-    return [...new Set(results)];
-  }, TEXT_PATTERNS.map((r) => r.source));
+    // Де-дуп по паре (контекст, ссылка)
+    const seen = new Map();
+    for (const r of results) {
+      const key = `${r.context}|${r.linkHref}`;
+      if (!seen.has(key)) seen.set(key, r);
+    }
+    return [...seen.values()];
+  }, patternSources, skipInsideLinks);
+}
+
+// Экранирует спецсимволы regex — нужно, чтобы обычное слово из words.txt
+// можно было безопасно использовать как паттерн для поиска по тексту
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // ─── ДАТА СОЗДАНИЯ/ОБНОВЛЕНИЯ СТРАНИЦЫ ─────────────────────────────────────────
@@ -472,11 +520,8 @@ async function debugDumpSearchPage(page, pageNum) {
   }
 }
 
-// Проходит по первым maxPages страницам выдачи Google и собирает URL результатов
-async function collectSearchUrls(query, maxPages) {
-  console.log(`\n🔎 Ищу в Google: "${query}"`);
-  console.log(`📑 Страниц выдачи: ${maxPages}\n`);
-
+// Открывает headful-браузер, настроенный для поиска в Google (куки, UA, антидетект)
+async function createSearchBrowserAndPage() {
   const cookies = loadGoogleCookies();
   console.log(cookies.length
     ? `🍪 Загружено ${cookies.length} куки Google`
@@ -502,65 +547,82 @@ async function collectSearchUrls(query, maxPages) {
     Object.defineProperty(navigator, 'webdriver', { get: () => false });
   });
 
+  return { browser, page };
+}
+
+// Проходит по первым maxPages страницам выдачи Google по запросу query на уже
+// открытой странице (переиспользуется между несколькими запросами подряд —
+// не пересоздаёт браузер на каждую комбинацию домен+слово)
+async function collectSearchUrlsForPage(page, query, maxPages) {
+  console.log(`\n🔎 Ищу в Google: "${query}"`);
+  console.log(`📑 Страниц выдачи: ${maxPages}\n`);
+
   const collected = [];
   const seen = new Set();
 
-  try {
-    for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
-      const start = (pageNum - 1) * 10;
-      const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=ru&num=10&start=${start}`;
+  for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
+    const start = (pageNum - 1) * 10;
+    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=ru&num=10&start=${start}`;
 
-      console.log(`  📄 Страница выдачи ${pageNum}/${maxPages}...`);
-      await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+    console.log(`  📄 Страница выдачи ${pageNum}/${maxPages}...`);
+    await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
 
-      try {
-        await page.waitForSelector('#search, #rso, .g, h3', { timeout: 12000 });
-      } catch {
-        // не загрузилось — проверим по количеству результатов ниже
-      }
-
-      await delay(800 + Math.random() * 600);
-
-      let results = await extractSearchResults(page);
-
-      if (isGoogleBlocked(page)) {
-        // Настоящая капча/блокировка — Google сам редиректнул на /sorry/
-        console.warn(`  ⚠️  Google показал капчу (редирект: ${page.url()})`);
-        await waitForEnter(`  Решите капчу в открытом окне браузера (страница ${pageNum}), затем вернитесь сюда.`);
-        await saveGoogleCookies(page);
-        // После капчи возвращаемся на нужный URL — Google мог оставить нас на /sorry/
-        await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
-        await delay(800 + Math.random() * 600);
-        results = await extractSearchResults(page);
-        console.log(`     После капчи: ${results.length} результатов`);
-      } else if (results.length < CONFIG.minSearchResultsThreshold) {
-        // Капчи нет, но и результатов почти нет — вероятно, разметка Google не совпала
-        // с нашими селекторами. Не блокируем скрипт, а сохраняем дамп для диагностики.
-        console.warn(`  ⚠️  Мало результатов (${results.length}), капча не обнаружена — возможно, изменилась разметка страницы.`);
-        await debugDumpSearchPage(page, pageNum);
-      }
-
-      for (const { url, title, description } of results) {
-        if (seen.has(url)) continue;
-        seen.add(url);
-        const snippetDate = extractSnippetDateFromText(description);
-        collected.push({ url, title, snippetDate, page: pageNum });
-      }
-
-      console.log(`     Найдено на странице: ${results.length}, всего уникальных: ${collected.length}`);
-
-      if (results.length === 0) {
-        console.log('  ⏹  Пустая страница — выдача закончилась.');
-        break;
-      }
-
-      await delay(CONFIG.searchPageDelay[0] + Math.random() * (CONFIG.searchPageDelay[1] - CONFIG.searchPageDelay[0]));
+    try {
+      await page.waitForSelector('#search, #rso, .g, h3', { timeout: 12000 });
+    } catch {
+      // не загрузилось — проверим по количеству результатов ниже
     }
-  } finally {
-    await browser.close();
+
+    await delay(800 + Math.random() * 600);
+
+    let results = await extractSearchResults(page);
+
+    if (isGoogleBlocked(page)) {
+      // Настоящая капча/блокировка — Google сам редиректнул на /sorry/
+      console.warn(`  ⚠️  Google показал капчу (редирект: ${page.url()})`);
+      await waitForEnter(`  Решите капчу в открытом окне браузера (страница ${pageNum}), затем вернитесь сюда.`);
+      await saveGoogleCookies(page);
+      // После капчи возвращаемся на нужный URL — Google мог оставить нас на /sorry/
+      await page.goto(searchUrl, { waitUntil: 'networkidle2', timeout: 30000 });
+      await delay(800 + Math.random() * 600);
+      results = await extractSearchResults(page);
+      console.log(`     После капчи: ${results.length} результатов`);
+    } else if (results.length < CONFIG.minSearchResultsThreshold) {
+      // Капчи нет, но и результатов почти нет — вероятно, разметка Google не совпала
+      // с нашими селекторами. Не блокируем скрипт, а сохраняем дамп для диагностики.
+      console.warn(`  ⚠️  Мало результатов (${results.length}), капча не обнаружена — возможно, изменилась разметка страницы.`);
+      await debugDumpSearchPage(page, pageNum);
+    }
+
+    for (const { url, title, description } of results) {
+      if (seen.has(url)) continue;
+      seen.add(url);
+      const snippetDate = extractSnippetDateFromText(description);
+      collected.push({ url, title, snippetDate, page: pageNum });
+    }
+
+    console.log(`     Найдено на странице: ${results.length}, всего уникальных: ${collected.length}`);
+
+    if (results.length === 0) {
+      console.log('  ⏹  Пустая страница — выдача закончилась.');
+      break;
+    }
+
+    await delay(CONFIG.searchPageDelay[0] + Math.random() * (CONFIG.searchPageDelay[1] - CONFIG.searchPageDelay[0]));
   }
 
   return collected;
+}
+
+// Проходит по первым maxPages страницам выдачи Google и собирает URL результатов
+// (одноразовый запуск: сам открывает и закрывает браузер — для одного запроса)
+async function collectSearchUrls(query, maxPages) {
+  const { browser, page } = await createSearchBrowserAndPage();
+  try {
+    return await collectSearchUrlsForPage(page, query, maxPages);
+  } finally {
+    await browser.close();
+  }
 }
 
 function saveCollectedUrls(dir, slug, dateStr, collected) {
@@ -572,9 +634,201 @@ function saveCollectedUrls(dir, slug, dateStr, collected) {
   console.log(`📄 Список найденных URL → ${path.basename(file)}`);
 }
 
+// ─── РЕЖИМ «ДОМЕНЫ × СЛОВА» ─────────────────────────────────────────────────────
+
+// Сырой список того, что нашли по каждой паре домен+слово — до подтверждения
+// (в самих найденных страницах слово ещё не проверялось, только то, что Google
+// его увидел в индексе по site:-запросу)
+function saveDomainsWordsRawList(dir, dateStr, aggregated) {
+  const file = path.join(dir, `search_urls_domains_words_${dateStr}.csv`);
+  const s = (v) => `"${String(v || '').replace(/"/g, '""')}"`;
+  const header = 'domain,matched_words,url,title,snippet_date\n';
+  const body = aggregated
+    .map(({ domain, words, url, title, snippetDate }) =>
+      [s(domain), s([...words].join('; ')), s(url), s(title), s(snippetDate)].join(','))
+    .join('\n');
+  fs.writeFileSync(file, header + body + '\n', 'utf8');
+  console.log(`📄 Список найденных URL (домены × слова) → ${path.basename(file)}`);
+}
+
+// Для каждой пары (домен, слово) ищет в Google "site:домен слово" и собирает
+// URL из выдачи — это и есть "ссылки на которых есть упоминание" из этого домена.
+// Затем заходит на каждую найденную страницу и подтверждает, что слово реально
+// встречается в тексте (в т.ч. если оно стоит в тексте самой ссылки — тогда
+// в итоговый результат попадёт именно URL этой ссылки, а не страницы).
+async function runDomainsWordsMode(rawDomains, words) {
+  const domains = rawDomains.map(normalizeDomainForSiteSearch);
+  const maxPagesPerCombo = resolvePagesCount();
+  const totalCombos = domains.length * words.length;
+
+  console.log(`\n🎯 Домены для проверки (${domains.length}): ${domains.join(', ')}`);
+  console.log(`🔤 Слова для проверки (${words.length}): ${words.join(', ')}`);
+  console.log(`📑 Комбинаций домен×слово: ${totalCombos}, страниц выдачи на комбинацию: ${maxPagesPerCombo}\n`);
+
+  // ── Шаг 1: собираем URL из Google по каждой паре домен+слово ──────────────
+  const { browser: searchBrowser, page: searchPage } = await createSearchBrowserAndPage();
+  const allCollected = [];
+  let comboIndex = 0;
+
+  try {
+    for (const domain of domains) {
+      for (const word of words) {
+        comboIndex++;
+        const query = buildSiteQuery(domain, word);
+        console.log(`\n═══ [${comboIndex}/${totalCombos}] ${query} ═══`);
+        const collected = await collectSearchUrlsForPage(searchPage, query, maxPagesPerCombo);
+        for (const item of collected) {
+          allCollected.push({ ...item, domain, word });
+        }
+      }
+    }
+  } finally {
+    await searchBrowser.close();
+  }
+
+  if (allCollected.length === 0) {
+    console.error('❌ Ни по одной комбинации домен+слово ничего не найдено в Google.');
+    process.exit(1);
+  }
+
+  // Агрегируем по URL — один и тот же URL мог найтись по нескольким словам
+  const byUrl = new Map();
+  for (const item of allCollected) {
+    if (!byUrl.has(item.url)) {
+      byUrl.set(item.url, {
+        url: item.url,
+        title: item.title,
+        domain: item.domain,
+        snippetDate: item.snippetDate,
+        words: new Set(),
+      });
+    }
+    byUrl.get(item.url).words.add(item.word);
+  }
+  const aggregated = [...byUrl.values()];
+
+  const dateStr = new Date().toISOString().slice(0, 10);
+  const RESULTS_DIR = ensureResultsDir();
+  saveDomainsWordsRawList(RESULTS_DIR, dateStr, aggregated);
+
+  // ── Шаг 2: заходим на каждую найденную страницу и подтверждаем упоминание ──
+  const OUTPUT_FILENAME = `results_domains_words_${dateStr}.csv`;
+  const ERRORS_FILENAME = `errors_domains_words_${dateStr}.csv`;
+  const LINKS_PATH = path.join(RESULTS_DIR, OUTPUT_FILENAME);
+  const ERRORS_PATH = path.join(RESULTS_DIR, ERRORS_FILENAME);
+  initCSV(LINKS_PATH, ERRORS_PATH);
+  console.log(`\n📄 Ссылки  → ${OUTPUT_FILENAME}`);
+  console.log(`📄 Ошибки  → ${ERRORS_FILENAME}\n`);
+
+  const checkBrowser = await puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  });
+
+  let countOk = 0;
+  let countErr = 0;
+  let countConfirmed = 0;
+
+  for (const item of aggregated) {
+    const page = await checkBrowser.newPage();
+    await page.setUserAgent(
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
+      '(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
+    );
+
+    try {
+      console.log(`🔍 Проверяю [${item.domain}]: ${item.url}`);
+
+      const response = await page.goto(item.url, {
+        waitUntil: 'domcontentloaded',
+        timeout: CONFIG.pageTimeout,
+      });
+
+      const status = response?.status();
+
+      if (status && status >= 400) {
+        console.warn(`  ⚠️  HTTP ${status} — записываю в лог ошибок`);
+        appendError(ERRORS_PATH, item.url, `HTTP_${status}`, `Сервер вернул статус ${status}`);
+        countErr++;
+        await page.close();
+        continue;
+      }
+
+      if (isCaptchaOrBlock(page)) {
+        appendError(ERRORS_PATH, item.url, 'BLOCKED', `Редирект на: ${page.url()}`);
+        countErr++;
+        await page.close();
+        continue;
+      }
+
+      const checkedAt = new Date().toISOString();
+      const pageDate = await resolvePageDate(page, response);
+
+      const wordsForUrl = [...item.words];
+      const wordPatternSources = wordsForUrl.map(escapeRegExp);
+      // skipInsideLinks: false — слово в тексте самой ссылки тоже считается
+      // (и тогда в url попадёт href этой ссылки, а не страницы)
+      const mentions = await findTextMentions(page, wordPatternSources, { skipInsideLinks: false });
+
+      if (mentions.length === 0) {
+        console.log('  ⚠️  Слово(-а) не подтвердились на странице (индекс Google мог устареть)');
+      } else {
+        const rows = mentions.map(({ context, patternIndex, linkHref }) => ({
+          sourcePage: item.domain,
+          url: linkHref || item.url,
+          text: context,
+          matchedDomain: wordsForUrl[patternIndex],
+          pageDate,
+          snippetDate: item.snippetDate,
+          checkedAt,
+        }));
+
+        rows.forEach(({ url, matchedDomain }) => {
+          console.log(`     → [${matchedDomain}] ${url}`);
+        });
+
+        appendLinks(LINKS_PATH, rows);
+        countConfirmed += rows.length;
+      }
+
+      countOk++;
+    } catch (err) {
+      const errorType = err.name === 'TimeoutError' ? 'TIMEOUT' : 'ERROR';
+      console.warn(`  ❌ ${errorType}: ${err.message} — записываю в лог ошибок`);
+      appendError(ERRORS_PATH, item.url, errorType, err.message);
+      countErr++;
+    } finally {
+      await page.close();
+    }
+
+    await delay(CONFIG.delayBetweenPages);
+  }
+
+  await checkBrowser.close();
+
+  console.log('\n════════════════════════════════════════════════');
+  console.log(`✅ Проверено страниц       : ${countOk}`);
+  console.log(`✅ Подтверждено упоминаний : ${countConfirmed}`);
+  console.log(`❌ Ошибок                  : ${countErr}`);
+  console.log(`📄 Результаты сохранены    : ${OUTPUT_FILENAME}`);
+  if (countErr > 0) {
+    console.log(`📄 Лог ошибок              : ${ERRORS_FILENAME}`);
+  }
+  console.log('════════════════════════════════════════════════\n');
+}
+
 // ─── MAIN ─────────────────────────────────────────────────────────────────────
 
 async function run() {
+  // ── Приоритетный режим: domains.txt + words.txt заполнены ──────────────────
+  const domains = loadOptionalList(CONFIG.domainsFile);
+  const words = loadOptionalList(CONFIG.wordsFile);
+
+  if (domains.length > 0 && words.length > 0) {
+    await runDomainsWordsMode(domains, words);
+    return;
+  }
+
   const query = resolveQuery();
   let pages;
   let outputSlug = null;
@@ -698,11 +952,11 @@ async function run() {
       console.log(`  🔗 Найдено ссылок на домены: ${rows.length}`);
 
       // ── 2. Ищем текстовые упоминания (без ссылки) ─────────────────────────
-      const textMentions = await findTextMentions(page);
+      const textMentions = await findTextMentions(page, TEXT_PATTERNS.map((r) => r.source));
 
       console.log(`  🔤 Найдено текстовых упоминаний: ${textMentions.length}`);
 
-      for (const context of textMentions) {
+      for (const { context } of textMentions) {
         rows.push({
           sourcePage: pageUrl,
           url: 'Нет ссылки',
