@@ -7,6 +7,7 @@ import { isPaused, pauseMessage } from '../utils/hotkeys.js';
 import { detectQueryIntentByKeywords } from '../utils/queryIntent.js';
 import { takeSerpScreenshot } from '../utils/screenshot.js';
 import { saveSerpFeaturesToCSV } from '../utils/serpFeatures.js';
+import { resolveGoogleGotoLinksInResults } from '../utils/resolveGoogleRedirects.js';
 
 puppeteer.use(StealthPlugin());
 
@@ -108,8 +109,9 @@ export default class BaseParser {
   async saveIntermediateResults() {
     try {
       const paths = this.getPaths();
-      
+
       if (this.results.length > 0) {
+        await resolveGoogleGotoLinksInResults(this.results);
         const resultsWithQueryType = this.addQueryTypeToResults(this.results);
         await saveToCSV(resultsWithQueryType, paths.intermediateResults, this.name);
         console.log(`\n💾 [${this.name}] Промежуточные результаты сохранены`);
@@ -270,6 +272,11 @@ export default class BaseParser {
           this.incompleteQueries.push(query);
         }
       }
+
+      // Google иногда отдаёт ссылки обёрнутыми в google.com/goto?url=... —
+      // распаковываем их ПОСЛЕ основного цикла (простой fetch, без браузера),
+      // чтобы не трогать логику сбора данных внутри searchQuery()
+      await resolveGoogleGotoLinksInResults(this.results);
 
       // Сохраняем результаты
       const resultsWithQueryType = this.addQueryTypeToResults(this.results);
