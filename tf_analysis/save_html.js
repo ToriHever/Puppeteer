@@ -1,21 +1,31 @@
-// Автоматически сохраняет HTML страниц по списку URL в tf_analysis/input/<DS>/ —
+// Автоматически сохраняет HTML страниц по списку URL в tf_analysis/input/<папка>/ —
 // заменяет ручной шаг "открыть в браузере → Ctrl+S → Веб-страница, только HTML"
 // из README для сайтов, которые не блокируют автоматические заходы. Если сайт
 // блокирует (капча/бот-защита) — используйте ручной способ, как раньше.
 //
 // Запуск:
-//   node tf_analysis/save_html.js <имя_папки>
-//   node tf_analysis/save_html.js            (спросит имя папки в консоли)
+//   node tf_analysis/save_html.js
 //
-// URL берутся из tf_analysis/scripts/save_html_urls.txt — строка с префиксом
-// "own:" сохранится как own.html, остальные — как <домен>.html (конкуренты).
+// Имя папки берётся прямо из scripts/save_html_urls.txt: строка, которая НЕ
+// похожа на URL — это название группы (= имя папки в input/), все URL после
+// неё и до следующего такого названия относятся к этой группе. Пустые строки
+// внутри группы не важны. Опционально одну строку в группе можно пометить
+// префиксом "own:" — она сохранится как own.html, остальные — как <домен>.html.
+//
+// Пример:
+//   защищённый сервер
+//   https://ddos-guard.ru/
+//   https://servero.ru/articles-and-sales/server-bezopasnosti.html
+//
+//   защищённый сервер от ddos
+//   own: https://ddos-guard.ru/blog/kak-zashchitit-server-ot-ddos
+//   https://firstvds.ru/ddos-protection
 
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 import path from 'path';
-import readline from 'readline';
 import { INPUT_DIR, SAVE_HTML_URLS_FILE } from './config.js';
 
 puppeteer.use(StealthPlugin());
@@ -23,34 +33,19 @@ puppeteer.use(StealthPlugin());
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-// ─── Имя папки DS ───────────────────────────────────────────────────────────
+// ─── Разбор списка на группы ────────────────────────────────────────────────
 
-function askFolderName() {
-  return new Promise((resolve) => {
-    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-    rl.question('Введите имя папки для сохранения (tf_analysis/input/<имя>): ', (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
+const URL_RE = /^https?:\/\//i;
+
+// Windows не разрешает \ / : * ? " < > | в имени папки — остальное (кириллица,
+// пробелы) можно оставлять как есть
+function sanitizeFolderName(title) {
+  return title.replace(/[\\/:*?"<>|]/g, '_').trim();
 }
 
-async function resolveFolderName() {
-  const fromArg = process.argv[2]?.trim();
-  if (fromArg) return fromArg;
-
-  const fromPrompt = await askFolderName();
-  if (!fromPrompt) {
-    console.error('❌ Имя папки не указано.');
-    process.exit(1);
-  }
-  return fromPrompt;
-}
-
-// ─── Список URL ─────────────────────────────────────────────────────────────
-
-// Строка вида "own: https://..." — своя страница, остальные — конкуренты
-async function readUrlList(filePath) {
+// Строка вида "own: https://..." внутри группы — своя страница, остальные —
+// конкуренты. Не-URL строка начинает новую группу (её текст = имя папки).
+async function readUrlGroups(filePath) {
   if (!existsSync(filePath)) {
     console.error(`❌ Файл со списком URL не найден: ${filePath}`);
     console.error('   Создайте его (см. пример в save_html_urls.txt) и запустите снова.');
@@ -62,24 +57,38 @@ async function readUrlList(filePath) {
     .map((l) => l.trim())
     .filter((l) => l && !l.startsWith('#'));
 
-  let ownUrl = null;
-  const competitorUrls = [];
+  const groups = [];
+  let current = null;
 
   for (const line of lines) {
     const ownMatch = line.match(/^own:\s*(.+)$/i);
+    const isUrlLine = ownMatch ? URL_RE.test(ownMatch[1].trim()) : URL_RE.test(line);
+
+    if (!isUrlLine) {
+      // Строка не похожа на URL — это заголовок новой группы (имя папки)
+      current = { title: line, folderName: sanitizeFolderName(line), ownUrl: null, competitorUrls: [] };
+      groups.push(current);
+      continue;
+    }
+
+    if (!current) {
+      console.warn(`⚠️  URL встретился раньше первой строки-названия папки, пропускаю: ${line}`);
+      continue;
+    }
+
     if (ownMatch) {
-      if (ownUrl) {
-        console.warn(`⚠️  Найдено больше одной строки "own:" — использую первую, остальные считаю конкурентами`);
-        competitorUrls.push(ownMatch[1].trim());
-        continue;
+      if (current.ownUrl) {
+        console.warn(`⚠️  В группе "${current.title}" уже есть "own:" — доп. строку считаю конкурентом`);
+        current.competitorUrls.push(ownMatch[1].trim());
+      } else {
+        current.ownUrl = ownMatch[1].trim();
       }
-      ownUrl = ownMatch[1].trim();
     } else {
-      competitorUrls.push(line);
+      current.competitorUrls.push(line);
     }
   }
 
-  return { ownUrl, competitorUrls };
+  return groups.filter((g) => g.ownUrl || g.competitorUrls.length > 0);
 }
 
 // ─── Имена файлов ───────────────────────────────────────────────────────────
@@ -112,11 +121,10 @@ async function saveOne(page, url, destPath) {
   await writeFile(destPath, html, 'utf-8');
 }
 
-// ─── Главная функция ────────────────────────────────────────────────────────
+// ─── Обработка одной группы (= одна папка) ──────────────────────────────────
 
-async function main() {
-  const folderName = await resolveFolderName();
-  const targetDir = path.join(INPUT_DIR, folderName);
+async function processGroup(page, group) {
+  const targetDir = path.join(INPUT_DIR, group.folderName);
 
   if (!existsSync(targetDir)) {
     await mkdir(targetDir, { recursive: true });
@@ -125,61 +133,79 @@ async function main() {
     console.log(`📁 Папка уже существует, сохраняю в неё: ${targetDir}`);
   }
 
-  const { ownUrl, competitorUrls } = await readUrlList(SAVE_HTML_URLS_FILE);
-
-  if (!ownUrl && competitorUrls.length === 0) {
-    console.error(`❌ В ${SAVE_HTML_URLS_FILE} нет ни одного URL.`);
-    process.exit(1);
-  }
-  if (!ownUrl) {
+  if (!group.ownUrl) {
     console.warn('⚠️  Нет строки "own:" — own.html сохранён не будет (для tf_analysis/index.js он обязателен).');
   }
 
   const jobs = [];
-  if (ownUrl) jobs.push({ url: ownUrl, filename: 'own.html', label: 'своя страница' });
+  if (group.ownUrl) jobs.push({ url: group.ownUrl, filename: 'own.html', label: 'своя страница' });
 
   const usedNames = new Set(['own.html']);
-  for (const url of competitorUrls) {
+  for (const url of group.competitorUrls) {
     jobs.push({ url, filename: filenameFromUrl(url, usedNames), label: 'конкурент' });
   }
 
-  console.log(`\n🔎 К сохранению: ${jobs.length} страниц(ы)\n`);
+  let ok = 0;
+  let failed = 0;
+
+  for (const { url, filename, label } of jobs) {
+    const destPath = path.join(targetDir, filename);
+    console.log(`🌐 [${label}] ${url}`);
+    try {
+      await saveOne(page, url, destPath);
+      console.log(`   ✓ Сохранено → ${filename}`);
+      ok++;
+    } catch (error) {
+      console.warn(`   ❌ Не удалось: ${error.message}`);
+      console.warn(`      (сайт мог заблокировать автоматический заход — сохраните вручную: Ctrl+S → "Веб-страница, только HTML" → ${filename})`);
+      failed++;
+    }
+  }
+
+  return { ok, failed, hasOwn: !!group.ownUrl, targetDir };
+}
+
+// ─── Главная функция ────────────────────────────────────────────────────────
+
+async function main() {
+  const groups = await readUrlGroups(SAVE_HTML_URLS_FILE);
+
+  if (groups.length === 0) {
+    console.error(`❌ В ${SAVE_HTML_URLS_FILE} нет ни одной группы с URL.`);
+    console.error('   Добавьте строку-название папки, а под ней — URL (см. пример в файле).');
+    process.exit(1);
+  }
+
+  console.log(`\n📋 Групп (папок) для обработки: ${groups.length}`);
+  groups.forEach((g, i) => console.log(`   ${i + 1}. "${g.title}" — ${(g.ownUrl ? 1 : 0) + g.competitorUrls.length} URL`));
 
   const browser = await puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-blink-features=AutomationControlled'],
   });
 
-  let ok = 0;
-  let failed = 0;
+  const summaries = [];
 
   try {
     const page = await browser.newPage();
     await page.setUserAgent(USER_AGENT);
 
-    for (const { url, filename, label } of jobs) {
-      const destPath = path.join(targetDir, filename);
-      console.log(`🌐 [${label}] ${url}`);
-      try {
-        await saveOne(page, url, destPath);
-        console.log(`   ✓ Сохранено → ${filename}`);
-        ok++;
-      } catch (error) {
-        console.warn(`   ❌ Не удалось: ${error.message}`);
-        console.warn(`      (сайт мог заблокировать автоматический заход — сохраните вручную: Ctrl+S → "Веб-страница, только HTML" → ${filename})`);
-        failed++;
-      }
+    for (const group of groups) {
+      console.log(`\n═══ "${group.title}" ═══`);
+      const result = await processGroup(page, group);
+      summaries.push({ title: group.title, ...result });
     }
   } finally {
     await browser.close();
   }
 
   console.log('\n════════════════════════════════════════════════');
-  console.log(`✅ Сохранено : ${ok}`);
-  console.log(`❌ Ошибок    : ${failed}`);
-  console.log(`📁 Папка     : ${targetDir}`);
-  if (failed === 0 && ownUrl) {
-    console.log('\nДобавьте query.txt в эту папку и запустите: node tf_analysis/index.js');
+  for (const s of summaries) {
+    console.log(`"${s.title}": ✅ ${s.ok} сохранено, ❌ ${s.failed} ошибок → ${s.targetDir}`);
+  }
+  const needsQuery = summaries.filter((s) => s.hasOwn).map((s) => s.title);
+  if (needsQuery.length > 0) {
+    console.log(`\nДобавьте query.txt в каждую готовую папку и запустите: node tf_analysis/index.js`);
   }
   console.log('════════════════════════════════════════════════\n');
 }

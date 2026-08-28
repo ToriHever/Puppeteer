@@ -1,12 +1,19 @@
 # Список URL для автосохранения HTML (save_html.js).
 # Строки с "#" и пустые — игнорируются.
 #
-# Ровно одну строку (свою страницу) пометьте префиксом "own:" — она
-# сохранится как own.html. Остальные строки — страницы конкурентов,
-# сохранятся под именем их домена (например sweb-ru.html).
+# Строка, которая НЕ похожа на URL, — это название группы = имя папки
+# в tf_analysis/input/. Все URL после неё (до следующего такого названия)
+# сохраняются в эту папку. Одну строку в группе можно пометить префиксом
+# "own:" — она сохранится как own.html, остальные — по домену.
 #
 # Пример:
-# own: https://ddos-guard.ru/web-protection
-# https://sweb.ru/cloud/DDoS-protection/
-# https://selectel.ru/services/protection/
+#
+# защищённый сервер
+# own: https://ddos-guard.ru/
+# https://servero.ru/articles-and-sales/server-bezopasnosti.html
+# https://firstvds.ru/ddos-protection
+#
+# защищённый сервер от ddos
+# own: https://ddos-guard.ru/blog/kak-zashchitit-server-ot-ddos
+# https://servero.ru/articles-and-sales/server-bezopasnosti.html
 
