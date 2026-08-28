@@ -11,6 +11,17 @@ import { resolveGoogleGotoLinksInResults } from '../utils/resolveGoogleRedirects
 
 puppeteer.use(StealthPlugin());
 
+// Puppeteer сам сообщает такими сообщениями, что страница/вкладка умерла
+// (закрылась вручную, упал процесс рендера, и т.п.) — в этом случае нет
+// смысла продолжать работать с тем же объектом page, он больше не рабочий.
+function isFatalPageError(error) {
+  const msg = error?.message || '';
+  return /session closed/i.test(msg)
+    || /detached frame/i.test(msg)
+    || /target closed/i.test(msg)
+    || /page has been closed/i.test(msg);
+}
+
 export const MODES = {
   COOKIE: 'cookie',
   INCOGNITO: 'incognito'
@@ -172,7 +183,7 @@ export default class BaseParser {
       }
 
       this.browser = await puppeteer.launch(launchOptions);
-      const page = await this.browser.newPage();
+      let page = await this.browser.newPage();
 
       // Настраиваем браузер
       await configureBrowser(page, this.mode === MODES.COOKIE ? cookies : [], config);
@@ -270,6 +281,30 @@ export default class BaseParser {
         } catch (error) {
           console.error(`[${this.name}] ❌ Ошибка при обработке запроса "${query}":`, error.message);
           this.incompleteQueries.push(query);
+
+          // Страница умерла (закрылась/упала) — переиспользовать её дальше
+          // бессмысленно, все следующие запросы будут падать с той же
+          // ошибкой. Пробуем открыть новую вкладку и продолжить со
+          // следующего запроса; если браузер тоже недоступен — прекращаем.
+          if (isFatalPageError(error) || page.isClosed()) {
+            console.warn(`[${this.name}] ⚠️ Вкладка браузера недоступна (закрыта/упала). Пробую открыть новую...`);
+            try {
+              if (!this.browser.isConnected()) {
+                throw new Error('Браузер отключён/закрыт');
+              }
+              page = await this.browser.newPage();
+              await configureBrowser(page, this.mode === MODES.COOKIE ? cookies : [], config);
+              console.log(`[${this.name}] ✓ Новая вкладка открыта, продолжаю со следующего запроса`);
+            } catch (recoveryError) {
+              const remaining = queries.length - i - 1;
+              console.error(`[${this.name}] ❌ Не удалось восстановить браузер: ${recoveryError.message}`);
+              console.log(`[${this.name}] ⏹ Останавливаю обработку — браузер недоступен. Оставшихся запросов: ${remaining}`);
+              for (let j = i + 1; j < queries.length; j++) {
+                this.incompleteQueries.push(queries[j]);
+              }
+              break;
+            }
+          }
         }
       }
 
