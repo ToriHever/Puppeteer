@@ -1,0 +1,12 @@
+# Список URL для автосохранения HTML (save_html.js).
+# Строки с "#" и пустые — игнорируются.
+#
+# Ровно одну строку (свою страницу) пометьте префиксом "own:" — она
+# сохранится как own.html. Остальные строки — страницы конкурентов,
+# сохранятся под именем их домена (например sweb-ru.html).
+#
+# Пример:
+# own: https://ddos-guard.ru/web-protection
+# https://sweb.ru/cloud/DDoS-protection/
+# https://selectel.ru/services/protection/
+
