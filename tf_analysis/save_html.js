@@ -306,11 +306,13 @@ async function main() {
     console.log(`   ${i + 1}. "${g.title}" — ${(g.ownUrl ? 1 : 0) + g.competitorUrls.length} URL${queryPart}${kwPart}`);
   });
 
-  // headless: false — при реальном поиске (query:) headless сильно повышает
-  // риск капчи, как и во всех остальных поисковых скриптах проекта
+  // headless: true — работает в скрытом режиме без видимого окна браузера.
+  // ⚠️ Если используете query: (реальный поиск в Google/Яндекс), headless
+  // заметно повышает риск капчи по сравнению с видимым режимом — если начнёт
+  // ловить капчу, верните здесь headless: false.
   const browser = await puppeteer.launch({
-    headless: false,
-    args: ['--no-sandbox', '--start-maximized', '--disable-blink-features=AutomationControlled'],
+    headless: true,
+    args: ['--no-sandbox', '--disable-blink-features=AutomationControlled'],
   });
 
   const summaries = [];
