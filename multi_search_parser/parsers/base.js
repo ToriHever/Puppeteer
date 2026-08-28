@@ -8,6 +8,7 @@ import { detectQueryIntentByKeywords } from '../utils/queryIntent.js';
 import { takeSerpScreenshot } from '../utils/screenshot.js';
 import { saveSerpFeaturesToCSV } from '../utils/serpFeatures.js';
 import { resolveGoogleGotoLinksInResults } from '../utils/resolveGoogleRedirects.js';
+import { determinePageType } from '../utils/pageClassifier.js';
 
 puppeteer.use(StealthPlugin());
 
@@ -100,6 +101,17 @@ export default class BaseParser {
     }
   }
 
+  // Пересчитывает pageType по финальному URL — вызывать ПОСЛЕ распаковки
+  // google.com/goto?url=... (determinePageType, вызванный раньше, во время
+  // самой экстракции в page.evaluate, видел бы ещё не распакованную ссылку:
+  // hostname=google.com, path=/goto — ни один паттерн не подходит, и почти
+  // все результаты Google получали бы "Непонятная").
+  reclassifyPageTypes(results) {
+    for (const result of results) {
+      result.pageType = determinePageType(result.url);
+    }
+  }
+
   // Добавление типа запроса к результатам
   addQueryTypeToResults(results) {
     const uniqueQueries = [...new Set(results.map(r => r.query))];
@@ -123,6 +135,7 @@ export default class BaseParser {
 
       if (this.results.length > 0) {
         await resolveGoogleGotoLinksInResults(this.results);
+        this.reclassifyPageTypes(this.results);
         const resultsWithQueryType = this.addQueryTypeToResults(this.results);
         await saveToCSV(resultsWithQueryType, paths.intermediateResults, this.name);
         console.log(`\n💾 [${this.name}] Промежуточные результаты сохранены`);
@@ -312,6 +325,10 @@ export default class BaseParser {
       // распаковываем их ПОСЛЕ основного цикла (простой fetch, без браузера),
       // чтобы не трогать логику сбора данных внутри searchQuery()
       await resolveGoogleGotoLinksInResults(this.results);
+
+      // pageType считался ещё по обёрнутой ссылке (google.com/goto) — теперь,
+      // когда URL распакован, пересчитываем его по-настоящему
+      this.reclassifyPageTypes(this.results);
 
       // Сохраняем результаты
       const resultsWithQueryType = this.addQueryTypeToResults(this.results);
