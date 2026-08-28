@@ -25,7 +25,7 @@ async function lemmasOfPhrases(phrases) {
   return lemmasFromTokens(tokens);
 }
 
-async function runTask(page, { query, folder, ownPath, competitorPaths, mainPhrases, lsiPhrases }) {
+async function runTask(page, { query, folder, ownPath, competitorPaths, mainPhrases, lsiPhrases }, dateStr) {
   console.log(`\n┌─────────────────────────────────────────`);
   console.log(`│ Запрос: "${query}" (папка: ${folder})`);
   console.log(`│ Конкурентов: ${competitorPaths.length}`);
@@ -66,10 +66,13 @@ async function runTask(page, { query, folder, ownPath, competitorPaths, mainPhra
   const aggregated = aggregateCompetitors(competitorPages, forcedLemmas);
   const { lemmaComparison, lengthSummary } = compareOwnPage(ownPage, aggregated, markedLemmas);
 
+  // Все результаты запуска — в одну папку results/<дата проверки>/, файлы
+  // именуются как раньше именовались подпапки (по слагу запроса) + суффикс
+  // "результат"/"summary"
   const slug = slugifyQuery(query);
-  const dir = path.join(RESULTS_DIR, slug);
-  await saveLemmaReport(path.join(dir, 'lemma_report.csv'), lemmaComparison);
-  await saveSummaryReport(path.join(dir, 'summary.csv'), {
+  const dir = path.join(RESULTS_DIR, dateStr);
+  await saveLemmaReport(path.join(dir, `${slug}_результат.csv`), lemmaComparison);
+  await saveSummaryReport(path.join(dir, `${slug}_summary.csv`), {
     query, ownUrl: ownPath, lengthSummary, competitorPages
   });
 }
@@ -87,12 +90,16 @@ async function main() {
     args: ['--no-sandbox', '--disable-blink-features=AutomationControlled']
   });
 
+  // Одна дата на весь запуск — все задачи из этого прогона попадают в одну
+  // папку results/<дата>/, даже если анализ займёт какое-то время после полуночи
+  const dateStr = new Date().toISOString().slice(0, 10);
+
   try {
     const page = await browser.newPage();
 
     for (const task of tasks) {
       try {
-        await runTask(page, task);
+        await runTask(page, task, dateStr);
       } catch (error) {
         console.error(`❌ Ошибка при обработке задачи "${task.query}": ${error.message}`);
       }
@@ -101,7 +108,7 @@ async function main() {
     await browser.close();
   }
 
-  console.log('\n✓ TF-анализ завершён.');
+  console.log(`\n✓ TF-анализ завершён. Результаты — в results/${dateStr}/`);
 }
 
 main().catch(error => {
