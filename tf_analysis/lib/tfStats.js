@@ -58,10 +58,19 @@ export function aggregateCompetitors(competitorPages, forcedLemmas = new Set()) 
 
   for (const lemma of allLemmas) {
     const counts = competitorPages.map(p => p.lemmaFreq.get(lemma) || 0);
-    const coverage = counts.filter(c => c > 0).length;
+    const nonZeroCounts = counts.filter(c => c > 0);
+    const coverage = nonZeroCounts.length;
     if (coverage < minCoverage && !forcedLemmas.has(lemma)) continue; // отфильтровываем редкие/шумовые леммы
 
-    lemmaStats.set(lemma, { ...stats(counts), coverage, totalPages: competitorPages.length });
+    // min/avg/median/max считаем только по конкурентам, которые СЛОВО
+    // ИСПОЛЬЗУЮТ. Если считать по всем (включая тех, у кого 0) — min почти
+    // всегда 0 (кто-то из топ-10 обычно слово не использует), и тогда
+    // "Недостаточно" физически недостижимо: 0 < 0 всегда false, значит
+    // страница без слова вовсе получала бы "Норма". Coverage отдельно
+    // показывает, сколько конкурентов вообще используют слово.
+    const statsBasis = nonZeroCounts.length > 0 ? nonZeroCounts : counts;
+
+    lemmaStats.set(lemma, { ...stats(statsBasis), coverage, totalPages: competitorPages.length });
   }
 
   const wordCounts = competitorPages.map(p => p.wordCount);
