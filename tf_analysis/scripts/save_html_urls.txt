@@ -1,19 +1,66 @@
 # Список URL для автосохранения HTML (save_html.js).
 # Строки с "#" и пустые — игнорируются.
 #
-# Строка, которая НЕ похожа на URL, — это название группы = имя папки
-# в tf_analysis/input/. Все URL после неё (до следующего такого названия)
-# сохраняются в эту папку. Одну строку в группе можно пометить префиксом
-# "own:" — она сохранится как own.html, остальные — по домену.
+# Ровно одну строку (свою страницу) пометьте префиксом "own:" — она
+# сохранится как own.html. Остальные строки — страницы конкурентов,
+# сохранятся под именем их домена (например sweb-ru.html).
 #
 # Пример:
-#
-# защищённый сервер
-# own: https://ddos-guard.ru/
-# https://servero.ru/articles-and-sales/server-bezopasnosti.html
-# https://firstvds.ru/ddos-protection
-#
-# защищённый сервер от ddos
-# own: https://ddos-guard.ru/blog/kak-zashchitit-server-ot-ddos
-# https://servero.ru/articles-and-sales/server-bezopasnosti.html
+# own: https://ddos-guard.ru/web-protection
+# https://sweb.ru/cloud/DDoS-protection/
+# https://selectel.ru/services/protection/
 
+
+защищенный сервер от
+own: https://ddos-guard.ru/server
+https://ddos-guard.ru/
+https://ddos-guard.ru/blog/kak-zashchitit-server-ot-ddos
+https://servero.ru/articles-and-sales/server-bezopasnosti.html
+https://firstvds.ru/ddos-protection
+https://www.atlex.ru/novosti/novosti-kompanii/server-dlya-zashhity-dannyh-ispolzovanie-bezopasnyh-hostingovyh-reshenij/
+https://aveon.ru/catalog/promyshlennye-kompyutery/servery/
+https://sweb.ru/cloud/DDoS-protection/
+https://www.nic.ru/info/blog/bezopasniy-khosting-kak-biznesu-obrabatyvat-personalnyye-dannyye/
+
+защита выделенного сервера
+own: https://ddos-guard.ru/server
+https://www.youstable.com/ru/%D0%91%D0%BB%D0%BE%D0%B3/%D0%B1%D0%B5%D0%B7%D0%BE%D0%BF%D0%B0%D1%81%D0%BD%D1%8B%D0%B9-%D0%B2%D1%8B%D0%B4%D0%B5%D0%BB%D0%B5%D0%BD%D0%BD%D1%8B%D0%B9-%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80/
+https://habr.com/ru/companies/selectel/articles/809669/
+https://docs.selectel.ru/dedicated/networks/anti-ddos/
+https://timeweb.cloud/docs/anti-ddos/anti-ddos-for-dedicated-servers
+https://cloud4box.com/blog/sposoby-uluchshit-bezopasnost-vydelennogo-servera/
+https://ru.internetport.com/en/blog/how-to-secure-dedicated-servers
+
+
+выделенный сервер с защитой
+own: https://ddos-guard.ru/server
+https://sweb.ru/cloud/DDoS-protection/
+https://ru.hostings.info/hostings/ratingsub/vydelennyy-server-s-zaschitoy-ot-ddos
+https://ddos-guard.ru/blog/zashishennye-ot-ddos-vydelennye-servery-chto-eto-za-usluga
+
+аренда сервера с защитой от
+own: https://ddos-guard.ru/server
+https://selectel.ru/services/cloud/servers/ddos/
+
+анти ддос сервер
+own: https://ddos-guard.ru/server
+https://ddos-guard.ru/
+https://selectel.ru/blog/anti-ddos/
+https://ddos-guard.ru/
+https://selectel.ru/blog/anti-ddos/
+https://dtf.ru/software/4761097-luchshie-servisy-zashchity-ot-ddos-atak
+https://tech.megafon.ru/information/anti-ddos-kak-rabotaet-i-komu-nuzhen
+https://sweb.ru/cloud/DDoS-protection/
+https://cloud.vk.ru/anti-ddos/
+https://mws.ru/blog/zashhita-servera-ot-ddos-atak/
+https://firstvds.ru/technology/antiddos
+https://k2.cloud/products/anti-ddos/
+
+сервер с защитой
+own: https://ddos-guard.ru/server
+https://selectel.ru/services/cloud/servers/ddos/
+https://sweb.ru/cloud/DDoS-protection/
+https://dtf.ru/software/4761097-luchshie-servisy-zashchity-ot-ddos-atak
+https://dtf.ru/top-raiting/5012753-luchshie-vps-vds-s-zashchitoy-ot-ddos
+https://ddos-guard.ru/
+https://ddos-guard.ru/blog/kak-zashchitit-server-ot-ddos
