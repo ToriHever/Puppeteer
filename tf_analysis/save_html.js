@@ -14,14 +14,21 @@
 //
 // Внутри группы:
 //   own: https://...   — своя страница (сохранится как own.html)
-//   query:              — дальше идут поисковые запросы, по одному на строку;
-//                         для каждого берётся ТОП-10 Google+Яндекс (через уже
-//                         существующий tf_analysis/lib/fetchTop10.js) — их
-//                         результаты добавляются к списку страниц для сохранения
-//   url:                — дальше идут URL напрямую, по одному на строку
-//                         (закрывает секцию query: — без явного url: следующая
-//                         не-URL строка внутри query: тоже считалась бы запросом)
-// Без меток query:/url: работает как раньше — просто список URL под заголовком.
+//   query:              — дальше идут ПОИСКОВЫЕ ЗАПРОСЫ, по одному на строку;
+//                         для каждого делается РЕАЛЬНЫЙ поиск (ТОП-10 из
+//                         Google+Яндекс через tf_analysis/lib/fetchTop10.js) —
+//                         результаты добавляются к списку страниц для сохранения.
+//                         НЕ путать с keywords: ниже — это разные вещи.
+//   keywords:           — дальше идёт содержимое для query.txt этой папки
+//                         (в т.ч. секции [Главные]/[LSI]) — записывается КАК ЕСТЬ,
+//                         без единого запроса в Google/Яндекс. Первая строка
+//                         query.txt — название группы (сам запрос).
+//   url:                — дальше идут URL напрямую, по одному на строку.
+//                         Закрывает секцию query: или keywords: (без явного
+//                         url: следующая строка внутри них тоже считалась бы
+//                         запросом/содержимым query.txt)
+// Без меток query:/keywords:/url: работает как раньше — просто список URL
+// под заголовком.
 //
 // Пример:
 //   защищённый сервер от ddos
@@ -29,6 +36,11 @@
 //   query:
 //   защита сервера от ddos
 //   аренда сервера с защитой
+//   keywords:
+//   [Главные]
+//   защита сервера, ddos атака
+//   [LSI]
+//   файрвол, хостинг, cdn
 //   url:
 //   https://firstvds.ru/technology/antiddos
 //   https://k2.cloud/products/anti-ddos/
@@ -50,6 +62,7 @@ const USER_AGENT =
 
 const URL_RE = /^https?:\/\//i;
 const QUERY_MARKER_RE = /^query:/i;
+const KEYWORDS_MARKER_RE = /^keywords:/i;
 const URL_MARKER_RE = /^url:/i;
 const OWN_RE = /^own:\s*(.+)$/i;
 
@@ -105,6 +118,15 @@ async function readUrlGroups(filePath) {
       continue;
     }
 
+    if (KEYWORDS_MARKER_RE.test(line)) {
+      if (!current) {
+        console.warn(`⚠️  "keywords:" встретилась раньше первой строки-названия папки, пропускаю`);
+        continue;
+      }
+      mode = 'keywords';
+      continue;
+    }
+
     if (URL_MARKER_RE.test(line)) {
       if (!current) {
         console.warn(`⚠️  "url:" встретилась раньше первой строки-названия папки, пропускаю`);
@@ -119,10 +141,23 @@ async function readUrlGroups(filePath) {
       continue;
     }
 
+    if (mode === 'keywords') {
+      // Строка идёт в query.txt как есть — в т.ч. заголовки секций [Главные]/[LSI]
+      current.queryFileLines.push(line);
+      continue;
+    }
+
     // mode === 'url'
     if (!URL_RE.test(line)) {
-      // Не похоже на URL и мы не внутри query: — это заголовок новой группы
-      current = { title: line, folderName: sanitizeFolderName(line), ownUrl: null, competitorUrls: [], queries: [] };
+      // Не похоже на URL и мы не внутри query:/keywords: — заголовок новой группы
+      current = {
+        title: line,
+        folderName: sanitizeFolderName(line),
+        ownUrl: null,
+        competitorUrls: [],
+        queries: [],
+        queryFileLines: [],
+      };
       groups.push(current);
       mode = 'url';
       continue;
@@ -136,7 +171,7 @@ async function readUrlGroups(filePath) {
     current.competitorUrls.push(line);
   }
 
-  return groups.filter((g) => g.ownUrl || g.competitorUrls.length > 0 || g.queries.length > 0);
+  return groups.filter((g) => g.ownUrl || g.competitorUrls.length > 0 || g.queries.length > 0 || g.queryFileLines.length > 0);
 }
 
 // ─── Имена файлов ───────────────────────────────────────────────────────────
@@ -183,6 +218,16 @@ async function processGroup(page, group) {
 
   if (!group.ownUrl) {
     console.warn('⚠️  Нет строки "own:" — own.html сохранён не будет (для tf_analysis/index.js он обязателен).');
+  }
+
+  // query.txt — записывается КАК ЕСТЬ из keywords:, без единого поиска в
+  // Google/Яндекс. Первая строка — название группы (сам запрос), дальше —
+  // содержимое keywords: (обычно секции [Главные]/[LSI]).
+  if (group.queryFileLines.length > 0) {
+    const queryTxtPath = path.join(targetDir, 'query.txt');
+    const content = [group.title, '', ...group.queryFileLines].join('\n');
+    await writeFile(queryTxtPath, content, 'utf-8');
+    console.log(`📝 query.txt записан (${group.queryFileLines.length} строк из keywords:)`);
   }
 
   // Собираем URL со всех источников: явные url: + ТОП-10 по каждому query:
@@ -240,7 +285,7 @@ async function processGroup(page, group) {
     }
   }
 
-  return { ok, failed, hasOwn: !!group.ownUrl, targetDir };
+  return { ok, failed, hasOwn: !!group.ownUrl, hasQueryFile: group.queryFileLines.length > 0, targetDir };
 }
 
 // ─── Главная функция ────────────────────────────────────────────────────────
@@ -256,8 +301,9 @@ async function main() {
 
   console.log(`\n📋 Групп (папок) для обработки: ${groups.length}`);
   groups.forEach((g, i) => {
-    const queryPart = g.queries.length ? `, ${g.queries.length} запрос(ов)` : '';
-    console.log(`   ${i + 1}. "${g.title}" — ${(g.ownUrl ? 1 : 0) + g.competitorUrls.length} URL${queryPart}`);
+    const queryPart = g.queries.length ? `, ${g.queries.length} поисковых запрос(ов)` : '';
+    const kwPart = g.queryFileLines.length ? `, query.txt из keywords:` : '';
+    console.log(`   ${i + 1}. "${g.title}" — ${(g.ownUrl ? 1 : 0) + g.competitorUrls.length} URL${queryPart}${kwPart}`);
   });
 
   // headless: false — при реальном поиске (query:) headless сильно повышает
@@ -286,10 +332,11 @@ async function main() {
   for (const s of summaries) {
     console.log(`"${s.title}": ✅ ${s.ok} сохранено, ❌ ${s.failed} ошибок → ${s.targetDir}`);
   }
-  const needsQuery = summaries.filter((s) => s.hasOwn).map((s) => s.title);
+  const needsQuery = summaries.filter((s) => s.hasOwn && !s.hasQueryFile).map((s) => s.title);
   if (needsQuery.length > 0) {
-    console.log(`\nДобавьте query.txt в каждую готовую папку и запустите: node tf_analysis/index.js`);
+    console.log(`\nДобавьте query.txt вручную в эти папки (нет keywords: в списке): ${needsQuery.join(', ')}`);
   }
+  console.log(`\nЗапустите: node tf_analysis/index.js`);
   console.log('════════════════════════════════════════════════\n');
 }
 
