@@ -39,8 +39,9 @@ function parseQueryFile(content) {
   return { query, mainPhrases, lsiPhrases };
 }
 
-// Сканирует tf_analysis/input/<любая-папка>/ — в каждой ожидается query.txt и own.html,
-// остальные *.html в этой же папке считаются страницами конкурентов.
+// Сканирует tf_analysis/input/<любая-папка>/ — в каждой ожидается файл запроса
+// (любое имя, главное — расширение .txt) и own.html, остальные *.html в этой
+// же папке считаются страницами конкурентов.
 export async function readInputTasks(inputDir) {
   let entries;
   try {
@@ -56,24 +57,36 @@ export async function readInputTasks(inputDir) {
     if (!entry.isDirectory()) continue;
 
     const dir = path.join(inputDir, entry.name);
-    const queryPath = path.join(dir, 'query.txt');
     const ownPath = path.join(dir, 'own.html');
+
+    const files = await readdir(dir);
+
+    // Файл запроса — любое имя, главное расширение .txt. Если их несколько,
+    // берём первый по алфавиту и предупреждаем (детерминированно и предсказуемо).
+    const txtFiles = files.filter(f => f.toLowerCase().endsWith('.txt')).sort();
+    if (txtFiles.length === 0) {
+      console.warn(`⚠️ Пропущена папка ${dir}: нет .txt файла с запросом`);
+      continue;
+    }
+    if (txtFiles.length > 1) {
+      console.warn(`⚠️ В папке ${dir} несколько .txt файлов (${txtFiles.join(', ')}) — использую "${txtFiles[0]}"`);
+    }
+    const queryPath = path.join(dir, txtFiles[0]);
 
     let query, mainPhrases, lsiPhrases;
     try {
       const content = await readFile(queryPath, 'utf-8');
       ({ query, mainPhrases, lsiPhrases } = parseQueryFile(content));
-    } catch {
-      console.warn(`⚠️ Пропущена папка ${dir}: нет query.txt`);
+    } catch (error) {
+      console.warn(`⚠️ Пропущена папка ${dir}: не удалось прочитать "${txtFiles[0]}" (${error.message})`);
       continue;
     }
 
     if (!query) {
-      console.warn(`⚠️ Пропущена папка ${dir}: query.txt пуст`);
+      console.warn(`⚠️ Пропущена папка ${dir}: "${txtFiles[0]}" пуст`);
       continue;
     }
 
-    const files = await readdir(dir);
     const hasOwn = files.includes('own.html');
     if (!hasOwn) {
       console.warn(`⚠️ Пропущена папка ${dir}: нет own.html`);
