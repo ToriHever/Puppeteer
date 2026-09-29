@@ -65,12 +65,3 @@ export async function saveSummaryReport(filePath, { query, ownUrl, lengthSummary
 
   await writeCSV(filePath, header, rows);
 }
-
-export function slugifyQuery(query) {
-  return query
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-zа-яё0-9]+/gi, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 60) || 'query';
-}

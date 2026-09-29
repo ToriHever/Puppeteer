@@ -5,7 +5,7 @@ import path from 'path';
 puppeteer.use(StealthPlugin());
 
 import { readInputTasks } from './utils/inputFolders.js';
-import { saveLemmaReport, saveSummaryReport, slugifyQuery } from './utils/report.js';
+import { saveLemmaReport, saveSummaryReport } from './utils/report.js';
 import { fetchPageText } from './lib/fetchPageText.js';
 import { lemmatizeText } from './lib/lemmatizer.js';
 import { buildLemmaFreq, aggregateCompetitors, compareOwnPage, lemmasFromTokens } from './lib/tfStats.js';
@@ -67,12 +67,12 @@ async function runTask(page, { query, folder, ownPath, competitorPaths, mainPhra
   const { lemmaComparison, lengthSummary } = compareOwnPage(ownPage, aggregated, markedLemmas);
 
   // Все результаты запуска — в одну папку results/<дата проверки>/, файлы
-  // именуются как раньше именовались подпапки (по слагу запроса) + суффикс
-  // "результат"/"summary"
-  const slug = slugifyQuery(query);
+  // именуются по имени папки input/<folder>/, из которой взяты данные
+  // (folder — уже валидное имя для файловой системы, доп. санитизация не нужна)
+  // + суффикс "результат"/"summary"
   const dir = path.join(RESULTS_DIR, dateStr);
-  await saveLemmaReport(path.join(dir, `${slug}_результат.csv`), lemmaComparison);
-  await saveSummaryReport(path.join(dir, `${slug}_summary.csv`), {
+  await saveLemmaReport(path.join(dir, `${folder}_результат.csv`), lemmaComparison);
+  await saveSummaryReport(path.join(dir, `${folder}_summary.csv`), {
     query, ownUrl: ownPath, lengthSummary, competitorPages
   });
 }
