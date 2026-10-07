@@ -44,6 +44,26 @@ export async function saveLemmaReport(filePath, lemmaComparison) {
   await writeCSV(filePath, header, rows);
 }
 
+// Сохраняет кластеры лемм (темы): по одной строке на лемму, с пометкой «Главное/LSI».
+// clusters — { words: [...], lsi: [...] } из clusterLemmas; в файл попадают оба разбиения.
+export async function saveClusterReport(filePath, clusters, lemmaComparison) {
+  const stat = new Map(lemmaComparison.map(r => [r.lemma, r]));
+  const header = 'Разбиение,Кластер,Тема,Лемма,Важность,Среднее ТОП-10,Покрытие,У вас';
+  const rows = [];
+  for (const [mode, label] of [['words', 'По словам (TF-IDF)'], ['lsi', 'По LSI (SVD)']]) {
+    for (const cluster of clusters[mode]) {
+      for (const item of cluster.items) {
+        const s = stat.get(item.lemma);
+        rows.push([
+          escapeCSV(label), cluster.id, escapeCSV(cluster.name), escapeCSV(item.lemma),
+          escapeCSV(item.importance), s ? s.avgCompetitor : '', escapeCSV(s ? s.coverage : ''), s ? s.ownCount : ''
+        ].join(','));
+      }
+    }
+  }
+  await writeCSV(filePath, header, rows);
+}
+
 // Сохраняет сводку по длине текста и списку проанализированных страниц
 export async function saveSummaryReport(filePath, { query, ownUrl, lengthSummary, competitorPages }) {
   const header = 'Параметр,Значение';
