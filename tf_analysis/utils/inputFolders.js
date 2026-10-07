@@ -39,8 +39,19 @@ function parseQueryFile(content) {
   return { query, mainPhrases, lsiPhrases };
 }
 
+// Запрос из имени папки: убираем пометки в скобках «(+=4 слова)» и суффикс поисковика («Яндекс»/«Google»)
+function queryFromFolderName(name) {
+  const cleaned = name
+    .replace(/\([^)]*\)/g, ' ')
+    .replace(/\s+(яндекс|google|гугл)\s*$/i, '')
+    .replace(/[_]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleaned || name;
+}
+
 // Сканирует tf_analysis/input/<любая-папка>/ — в каждой ожидается файл запроса
-// (любое имя, главное — расширение .txt) и own.html, остальные *.html в этой
+// (необязателен; любое имя, расширение .txt) и own.html, остальные *.html в этой
 // же папке считаются страницами конкурентов.
 export async function readInputTasks(inputDir) {
   let entries;
@@ -61,30 +72,26 @@ export async function readInputTasks(inputDir) {
 
     const files = await readdir(dir);
 
-    // Файл запроса — любое имя, главное расширение .txt. Если их несколько,
-    // берём первый по алфавиту и предупреждаем (детерминированно и предсказуемо).
+    // Файл запроса необязателен. Если .txt есть — берём его (при нескольких первый по алфавиту);
+    // нет файла или в нём нет запроса — запросом становится имя папки, а главные/LSI-слова
+    // скрипт определит сам по страницам ТОП-10.
     const txtFiles = files.filter(f => f.toLowerCase().endsWith('.txt')).sort();
-    if (txtFiles.length === 0) {
-      console.warn(`⚠️ Пропущена папка ${dir}: нет .txt файла с запросом`);
-      continue;
-    }
     if (txtFiles.length > 1) {
       console.warn(`⚠️ В папке ${dir} несколько .txt файлов (${txtFiles.join(', ')}) — использую "${txtFiles[0]}"`);
     }
-    const queryPath = path.join(dir, txtFiles[0]);
 
-    let query, mainPhrases, lsiPhrases;
-    try {
-      const content = await readFile(queryPath, 'utf-8');
-      ({ query, mainPhrases, lsiPhrases } = parseQueryFile(content));
-    } catch (error) {
-      console.warn(`⚠️ Пропущена папка ${dir}: не удалось прочитать "${txtFiles[0]}" (${error.message})`);
-      continue;
+    let query = '', mainPhrases = [], lsiPhrases = [];
+    if (txtFiles.length > 0) {
+      try {
+        const content = await readFile(path.join(dir, txtFiles[0]), 'utf-8');
+        ({ query, mainPhrases, lsiPhrases } = parseQueryFile(content));
+      } catch (error) {
+        console.warn(`⚠️ Не удалось прочитать "${txtFiles[0]}" в ${dir} (${error.message}) — запрос возьмём из имени папки`);
+      }
     }
-
     if (!query) {
-      console.warn(`⚠️ Пропущена папка ${dir}: "${txtFiles[0]}" пуст`);
-      continue;
+      query = queryFromFolderName(entry.name);
+      console.log(`ℹ️ ${entry.name}: файла запроса нет — запрос "${query}" взят из имени папки, главные/LSI-слова определяются автоматически`);
     }
 
     const hasOwn = files.includes('own.html');
