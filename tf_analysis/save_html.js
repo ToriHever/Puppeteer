@@ -13,7 +13,7 @@
 // этой группе — до следующего такого заголовка. Пустые строки не важны.
 //
 // Внутри группы:
-//   own: https://...   — своя страница (сохранится как own.html)
+//   own: https://...   — своя страница (сохранится как own.txt)
 //   query:              — дальше идут ПОИСКОВЫЕ ЗАПРОСЫ, по одному на строку;
 //                         для каждого делается РЕАЛЬНЫЙ поиск (ТОП-10 из
 //                         Google+Яндекс через tf_analysis/lib/fetchTop10.js) —
@@ -176,7 +176,7 @@ async function readUrlGroups(filePath) {
 
 // ─── Имена файлов ───────────────────────────────────────────────────────────
 
-// example.ru/path -> example-ru.html; при повторе домена — example-ru_2.html
+// example.ru/path -> example-ru.txt; при повторе домена — example-ru_2.txt
 function filenameFromUrl(url, usedNames) {
   let base;
   try {
@@ -186,10 +186,10 @@ function filenameFromUrl(url, usedNames) {
   }
   base = base.replace(/^-+|-+$/g, '') || 'page';
 
-  let name = `${base}.html`;
+  let name = `${base}.txt`;
   let counter = 2;
   while (usedNames.has(name)) {
-    name = `${base}_${counter}.html`;
+    name = `${base}_${counter}.txt`;
     counter++;
   }
   usedNames.add(name);
@@ -217,7 +217,7 @@ async function processGroup(page, group) {
   }
 
   if (!group.ownUrl) {
-    console.warn('⚠️  Нет строки "own:" — own.html сохранён не будет (для tf_analysis/index.js он обязателен).');
+    console.warn('⚠️  Нет строки "own:" — own.txt сохранён не будет (для tf_analysis/index.js он обязателен).');
   }
 
   // query.txt — записывается КАК ЕСТЬ из keywords:, без единого поиска в
@@ -261,9 +261,9 @@ async function processGroup(page, group) {
   });
 
   const jobs = [];
-  if (group.ownUrl) jobs.push({ url: group.ownUrl, filename: 'own.html', label: 'своя страница' });
+  if (group.ownUrl) jobs.push({ url: group.ownUrl, filename: 'own.txt', label: 'своя страница' });
 
-  const usedNames = new Set(['own.html']);
+  const usedNames = new Set(['own.txt']);
   for (const url of dedupedUrls) {
     jobs.push({ url, filename: filenameFromUrl(url, usedNames), label: 'конкурент' });
   }

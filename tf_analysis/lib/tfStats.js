@@ -70,7 +70,11 @@ export function aggregateCompetitors(competitorPages, forcedLemmas = new Set()) 
     // показывает, сколько конкурентов вообще используют слово.
     const statsBasis = nonZeroCounts.length > 0 ? nonZeroCounts : counts;
 
-    lemmaStats.set(lemma, { ...stats(statsBasis), coverage, totalPages: competitorPages.length });
+    const headingCounts = competitorPages.map(p => p.headingFreq?.get(lemma) || 0);
+    const headingCoverage = headingCounts.filter(c => c > 0).length;
+    const avgHeading = headingCounts.reduce((a, b) => a + b, 0) / competitorPages.length;
+
+    lemmaStats.set(lemma, { ...stats(statsBasis), coverage, headingCoverage, avgHeading, totalPages: competitorPages.length });
   }
 
   const wordCounts = competitorPages.map(p => p.wordCount);
@@ -109,6 +113,9 @@ export function compareOwnPage(ownPage, aggregated, markedLemmas = { main: new S
       medianCompetitor: competitorStat.median,
       maxCompetitor: competitorStat.max,
       coverage: `${competitorStat.coverage}/${competitorStat.totalPages}`,
+      ownHeadingCount: ownPage.headingFreq?.get(lemma) || 0,
+      avgHeadingCompetitor: Number(competitorStat.avgHeading.toFixed(1)),
+      headingCoverage: `${competitorStat.headingCoverage}/${competitorStat.totalPages}`,
       recommendation: classifyByRange(ownCount, competitorStat)
     });
   }

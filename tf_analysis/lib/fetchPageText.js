@@ -1,4 +1,5 @@
 import path from 'path';
+import { readFile } from 'fs/promises';
 import { pathToFileURL } from 'url';
 
 const NOISE_SELECTORS = [
@@ -14,14 +15,24 @@ function resolveTarget(source) {
 
 // Загружает страницу (с сайта или из локального HTML-файла) и извлекает основной текст, кол-во слов и символов
 export async function fetchPageText(page, source) {
-  const target = resolveTarget(source);
-  const waitUntil = target.startsWith('file:') ? 'load' : 'networkidle2';
-  await page.goto(target, { waitUntil, timeout: 30000 });
+  if (/\.txt$/i.test(source)) {
+    // HTML-код страницы, сохранённый в .txt: Chrome показал бы его как простой текст, поэтому подставляем как HTML
+    const html = await readFile(source, 'utf-8');
+    // Это уже отрендеренный снимок (page.content()), скрипты повторно не нужны — они могут стереть содержимое
+    await page.setJavaScriptEnabled(false);
+    await page.setContent(html, { waitUntil: 'load', timeout: 30000 });
+  } else {
+    const target = resolveTarget(source);
+    await page.setJavaScriptEnabled(true);
+    const waitUntil = target.startsWith('file:') ? 'load' : 'networkidle2';
+    await page.goto(target, { waitUntil, timeout: 30000 });
+  }
 
-  const text = await page.evaluate((noiseSelectors) => {
+  const { text, headings } = await page.evaluate((noiseSelectors) => {
     const clone = document.body.cloneNode(true);
     clone.querySelectorAll(noiseSelectors.join(',')).forEach(el => el.remove());
-    return clone.innerText || '';
+    const headings = [...clone.querySelectorAll('h1, h2, h3')].map(el => el.textContent || '').join('. ');
+    return { text: clone.innerText || '', headings };
   }, NOISE_SELECTORS);
 
   const normalized = text.replace(/\s+/g, ' ').trim();
@@ -32,6 +43,7 @@ export async function fetchPageText(page, source) {
   return {
     source,
     text: normalized,
+    headings: headings.replace(/\s+/g, ' ').trim(),
     wordCount: words.length,
     charCount: normalized.length,
     charCountNoSpaces: normalized.replace(/\s/g, '').length
