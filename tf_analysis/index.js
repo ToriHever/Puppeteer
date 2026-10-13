@@ -4,7 +4,7 @@ import path from 'path';
 
 puppeteer.use(StealthPlugin());
 
-import { readInputTasks } from './utils/inputFolders.js';
+import { readInputTasks, convertHtmlToTxt } from './utils/inputFolders.js';
 import { saveLemmaReport, saveSummaryReport, saveClusterReport } from './utils/report.js';
 import { clusterLemmas, findLsiTerms } from './lib/cluster.js';
 import { saveWordCloud } from './lib/cloud.js';
@@ -12,13 +12,15 @@ import { mergeCsvToXlsx } from './merge_to_xlsx.js';
 import { fetchPageText } from './lib/fetchPageText.js';
 import { lemmatizeText } from './lib/lemmatizer.js';
 import { buildLemmaFreq, aggregateCompetitors, compareOwnPage, lemmasFromTokens } from './lib/tfStats.js';
-import { RESULTS_DIR, INPUT_DIR, CLOUD_MAX_WORDS, AUTO_LSI_MAX_TERMS, AUTO_LSI_MIN_SIMILARITY, AUTO_LSI_MIN_COVERAGE } from './config.js';
+import { RESULTS_DIR, INPUT_DIR, CLOUD_MAX_WORDS, AUTO_LSI_MAX_TERMS, AUTO_LSI_MIN_SIMILARITY, AUTO_LSI_MIN_COVERAGE, HEADING_WEIGHT } from './config.js';
 
 async function analyzePage(page, source) {
   const pageText = await fetchPageText(page, source);
   const tokens = await lemmatizeText(pageText.text);
   const lemmaFreq = buildLemmaFreq(tokens);
-  return { source, lemmaFreq, wordCount: pageText.wordCount, charCount: pageText.charCount };
+  // Заголовки H1–H3 — отдельная частотная карта (их слова входят и в общий текст)
+  const headingFreq = buildLemmaFreq(await lemmatizeText(pageText.headings));
+  return { source, lemmaFreq, headingFreq, wordCount: pageText.wordCount, charCount: pageText.charCount };
 }
 
 // Лемматизирует вручную заданные фразы (главные/LSI-слова из query.txt) и возвращает множество их лемм
@@ -68,16 +70,21 @@ async function runTask(browser, page, { query, folder, ownPath, competitorPaths,
   const forcedLemmas = new Set([...mainLemmas, ...lsiLemmas]);
   const aggregated = aggregateCompetitors(competitorPages, forcedLemmas);
 
-  // Автоматический поиск LSI: якоря — леммы запроса и главные слова из query.txt (если есть).
-  // Ручная разметка LSI из query.txt остаётся приоритетной, авто-слова её дополняют.
+  // Автоматическое определение главных и LSI-слов — работает и без query.txt.
+  // Центр темы (якоря) — леммы запроса и главные слова; если ни одного из них нет на страницах
+  // ТОП-10, берутся самые частотные слова. Если главные слова не заданы вручную, якоря и есть
+  // автоматические «Главные»; LSI — слова, ближайшие к якорям в LSI-пространстве.
+  // Ручная разметка из query.txt всегда приоритетнее авто-определения.
   const anchorLemmas = new Set([...mainLemmas, ...await lemmasOfPhrases([query])]);
   const lsiSearch = findLsiTerms([...aggregated.lemmaStats.keys()], competitorPages, anchorLemmas, {
     minSimilarity: AUTO_LSI_MIN_SIMILARITY, maxTerms: AUTO_LSI_MAX_TERMS, minCoverage: AUTO_LSI_MIN_COVERAGE
   });
+  const autoMain = mainLemmas.size > 0 ? [] : lsiSearch.anchors;
   const autoLsi = lsiSearch.terms.map(x => x.lemma).filter(l => !lsiLemmas.has(l));
+  markedLemmas.autoMain = new Set(autoMain);
   markedLemmas.autoLsi = new Set(autoLsi);
   console.log(`  Центр темы (${lsiSearch.fallback ? 'слов запроса нет в текстах — самые частотные' : 'запрос/главные'}): ${lsiSearch.anchors.join(', ')}`);
-  console.log(`  Авто-LSI слов: ${autoLsi.length}${autoLsi.length ? ` (${autoLsi.slice(0, 8).join(', ')}…)` : ''}`);
+  console.log(`  Авто-главных: ${autoMain.length}, авто-LSI: ${autoLsi.length}${autoLsi.length ? ` (${autoLsi.slice(0, 8).join(', ')}…)` : ''}`);
 
   const { lemmaComparison, lengthSummary } = compareOwnPage(ownPage, aggregated, markedLemmas);
 
@@ -93,9 +100,9 @@ async function runTask(browser, page, { query, folder, ownPath, competitorPaths,
 
   // Кластеры слов (KMeans) и облака слов: по обычным TF-IDF-векторам и по LSI
   const items = lemmaComparison
-    .map(r => ({ lemma: r.lemma, weight: r.avgCompetitor, importance: r.importance }))
+    .map(r => ({ lemma: r.lemma, weight: r.avgCompetitor + (HEADING_WEIGHT - 1) * r.avgHeadingCompetitor, importance: r.importance }))
     .sort((a, b) => (b.importance !== '') - (a.importance !== '') || b.weight - a.weight)
-    .slice(0, Math.max(CLOUD_MAX_WORDS, mainLemmas.size + lsiLemmas.size + autoLsi.length))
+    .slice(0, Math.max(CLOUD_MAX_WORDS, mainLemmas.size + lsiLemmas.size + autoMain.length + autoLsi.length))
     .filter(i => i.weight > 0);
   if (items.length >= 6) {
     const clusters = clusterLemmas(items, competitorPages);
@@ -108,10 +115,11 @@ async function runTask(browser, page, { query, folder, ownPath, competitorPaths,
 }
 
 async function main() {
+  await convertHtmlToTxt(INPUT_DIR);
   const tasks = await readInputTasks(INPUT_DIR);
   if (tasks.length === 0) {
     console.log(`Нет задач в ${INPUT_DIR}.`);
-    console.log('Создайте подпапку tf_analysis/input/<любое-имя>/ с файлами: query.txt, own.html и HTML-файлами конкурентов.');
+    console.log('Создайте подпапку tf_analysis/input/<любое-имя>/ с файлами: query.txt, own.html (или own.txt) и страницами конкурентов (.html или .txt с HTML-кодом).');
     return;
   }
 

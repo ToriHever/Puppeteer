@@ -70,7 +70,11 @@ export function aggregateCompetitors(competitorPages, forcedLemmas = new Set()) 
     // показывает, сколько конкурентов вообще используют слово.
     const statsBasis = nonZeroCounts.length > 0 ? nonZeroCounts : counts;
 
-    lemmaStats.set(lemma, { ...stats(statsBasis), coverage, totalPages: competitorPages.length });
+    const headingCounts = competitorPages.map(p => p.headingFreq?.get(lemma) || 0);
+    const headingCoverage = headingCounts.filter(c => c > 0).length;
+    const avgHeading = headingCounts.reduce((a, b) => a + b, 0) / competitorPages.length;
+
+    lemmaStats.set(lemma, { ...stats(statsBasis), coverage, headingCoverage, avgHeading, totalPages: competitorPages.length });
   }
 
   const wordCounts = competitorPages.map(p => p.wordCount);
@@ -92,14 +96,14 @@ function classifyByRange(value, { min, max }) {
 }
 
 // Сравнивает свою страницу с агрегированной статистикой ТОП-10.
-// markedLemmas — леммы главных/LSI-слов из query.txt: { main: Set, lsi: Set } плюс autoLsi — LSI-слова,
+// markedLemmas — леммы главных/LSI-слов из query.txt: { main: Set, lsi: Set } плюс autoMain/autoLsi — главные и LSI-слова,
 // найденные автоматически (приоритет у ручной разметки)
-export function compareOwnPage(ownPage, aggregated, markedLemmas = { main: new Set(), lsi: new Set(), autoLsi: new Set() }) {
+export function compareOwnPage(ownPage, aggregated, markedLemmas = { main: new Set(), lsi: new Set(), autoMain: new Set(), autoLsi: new Set() }) {
   const lemmaComparison = [];
 
   for (const [lemma, competitorStat] of aggregated.lemmaStats.entries()) {
     const ownCount = ownPage.lemmaFreq.get(lemma) || 0;
-    const importance = markedLemmas.main.has(lemma) ? 'Главное' : markedLemmas.lsi.has(lemma) ? 'LSI' : markedLemmas.autoLsi?.has(lemma) ? 'LSI (авто)' : '';
+    const importance = markedLemmas.main.has(lemma) ? 'Главное' : markedLemmas.autoMain?.has(lemma) ? 'Главное (авто)' : markedLemmas.lsi.has(lemma) ? 'LSI' : markedLemmas.autoLsi?.has(lemma) ? 'LSI (авто)' : '';
     lemmaComparison.push({
       lemma,
       importance,
@@ -109,13 +113,16 @@ export function compareOwnPage(ownPage, aggregated, markedLemmas = { main: new S
       medianCompetitor: competitorStat.median,
       maxCompetitor: competitorStat.max,
       coverage: `${competitorStat.coverage}/${competitorStat.totalPages}`,
+      ownHeadingCount: ownPage.headingFreq?.get(lemma) || 0,
+      avgHeadingCompetitor: Number(competitorStat.avgHeading.toFixed(1)),
+      headingCoverage: `${competitorStat.headingCoverage}/${competitorStat.totalPages}`,
       recommendation: classifyByRange(ownCount, competitorStat)
     });
   }
 
   // Сортируем: сначала вручную помеченные слова (Главное, потом LSI), внутри группы — недо/переоптимизированные
   lemmaComparison.sort((a, b) => {
-    const importanceRank = { 'Главное': 0, 'LSI': 1, 'LSI (авто)': 2, '': 3 };
+    const importanceRank = { 'Главное': 0, 'Главное (авто)': 1, 'LSI': 2, 'LSI (авто)': 3, '': 4 };
     if (importanceRank[a.importance] !== importanceRank[b.importance]) {
       return importanceRank[a.importance] - importanceRank[b.importance];
     }

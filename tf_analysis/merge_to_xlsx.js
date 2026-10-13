@@ -109,7 +109,14 @@ export async function mergeCsvToXlsx(dir) {
   for (const { sheetName, rows } of sheets) addSheet(workbook, sheetName, rows);
 
   const outPath = path.join(dir, `${path.basename(dir)}_все.xlsx`);
-  await workbook.xlsx.writeFile(outPath);
+  try {
+    await workbook.xlsx.writeFile(outPath);
+  } catch (error) {
+    if (error.code === 'EBUSY' || error.code === 'EPERM') {
+      throw new Error(`файл ${outPath} открыт в Excel — закройте его и запустите "node merge_to_xlsx.js" снова`);
+    }
+    throw error;
+  }
   console.log(`✓ Книга Excel сохранена (${files.length} вкладок): ${outPath}`);
   return outPath;
 }

@@ -28,7 +28,7 @@ async function writeCSV(filePath, header, rows) {
 
 // Сохраняет леммы (свои/мин/среднее/медиана/макс/покрытие/рекомендация)
 export async function saveLemmaReport(filePath, lemmaComparison) {
-  const header = 'Лемма,Важность,У вас,Мин ТОП-10,Среднее ТОП-10,Медиана ТОП-10,Макс ТОП-10,Покрытие,Рекомендация';
+  const header = 'Лемма,Важность,У вас,Мин ТОП-10,Среднее ТОП-10,Медиана ТОП-10,Макс ТОП-10,Покрытие,H1–H3 у вас,H1–H3 среднее ТОП-10,H1–H3 покрытие,Рекомендация';
   const rows = lemmaComparison.map(row => [
     escapeCSV(row.lemma),
     escapeCSV(row.importance),
@@ -38,6 +38,9 @@ export async function saveLemmaReport(filePath, lemmaComparison) {
     row.medianCompetitor,
     row.maxCompetitor,
     escapeCSV(row.coverage),
+    row.ownHeadingCount,
+    row.avgHeadingCompetitor,
+    escapeCSV(row.headingCoverage),
     escapeCSV(row.recommendation)
   ].join(','));
 

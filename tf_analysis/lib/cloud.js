@@ -55,7 +55,7 @@ export async function saveWordCloud(browser, filePath, clusters, title) {
 
     for (const word of words) {
       let size = sizeOf(word.weight);
-      const style = word.importance === 'Главное' ? 'bold' : word.importance.startsWith('LSI') ? 'italic' : '';
+      const style = word.importance.startsWith('Главное') ? 'bold' : word.importance.startsWith('LSI') ? 'italic' : '';
       let done = false;
       while (!done && size >= 9) {
         ctx.font = `${style} ${size}px ${FONT}`.trim();
@@ -72,7 +72,7 @@ export async function saveWordCloud(browser, filePath, clusters, title) {
           ctx.fillStyle = word.color;
           ctx.textBaseline = 'top';
           ctx.fillText(word.lemma, x + 3, y);
-          if (word.importance === 'Главное') {
+          if (word.importance.startsWith('Главное')) {
             ctx.fillRect(x + 3, y + h - 2, w - 6, 2);
           }
           done = true;
@@ -96,7 +96,7 @@ export async function saveWordCloud(browser, filePath, clusters, title) {
     });
     ctx.fillStyle = '#666';
     ctx.font = `14px ${FONT}`;
-    ctx.fillText('Жирный подчёркнутый — «Главное», курсив — «LSI» (в т.ч. найденные автоматически), размер — средняя частота у ТОП-10', 20, H - 10);
+    ctx.fillText('Жирный подчёркнутый — «Главное» (в т.ч. авто), курсив — «LSI» (в т.ч. найденные автоматически), размер — средняя частота у ТОП-10', 20, H - 10);
   }, { data, title, W: WIDTH, H: HEIGHT });
 
   await page.screenshot({ path: filePath, clip: { x: 0, y: 0, width: WIDTH, height: HEIGHT } });
