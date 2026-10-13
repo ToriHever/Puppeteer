@@ -24,4 +24,3 @@ export const CLOUD_MAX_WORDS = 120;   // сколько лемм (по убыв�
 export const RESULTS_DIR = path.join(__dirname, 'results');
 export const TASKS_FILE = path.join(__dirname, 'scripts', 'tasks.txt');
 export const INPUT_DIR = path.join(__dirname, 'input');
-export const SAVE_HTML_URLS_FILE = path.join(__dirname, 'scripts', 'save_html_urls.txt');

@@ -4,7 +4,7 @@ import { pathToFileURL } from 'url';
 
 const NOISE_SELECTORS = [
   'script', 'style', 'noscript', 'nav', 'header', 'footer',
-  'aside', 'form', 'iframe', 'svg', 'button',
+  'aside', 'form', 'iframe', 'svg',
   '[role="navigation"]', '[role="banner"]', '[role="contentinfo"]'
 ];
 
