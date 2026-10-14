@@ -7,6 +7,7 @@ import { isPaused, pauseMessage } from '../utils/hotkeys.js';
 import { detectQueryIntentByKeywords } from '../utils/queryIntent.js';
 import { takeSerpScreenshot } from '../utils/screenshot.js';
 import { saveSerpFeaturesToCSV } from '../utils/serpFeatures.js';
+import { expandAiAnswer, takeAiScreenshot, saveAiAnswersToCSV } from '../utils/aiAnswer.js';
 import { resolveGoogleGotoLinksInResults } from '../utils/resolveGoogleRedirects.js';
 import { determinePageType } from '../utils/pageClassifier.js';
 
@@ -42,6 +43,9 @@ export default class BaseParser {
     // боковая панель, похожие вопросы) — тоже опция, включается по желанию
     this.serpFeaturesEnabled = !!options.serpFeatures;
     this.serpFeatureRows = [];
+    // Раскрытие ИИ-ответа (Обзор от ИИ / Нейро) + скриншот + текст в таблицу
+    this.aiAnswerEnabled = !!options.aiAnswer;
+    this.aiAnswerRows = [];
   }
 
   // Метод для получения конфигурации (переопределяется в наследниках)
@@ -65,12 +69,14 @@ export default class BaseParser {
     return {
       queries: './scripts/queries.txt',
       cookies: `./scripts/cookies/${this.name}.json`,
-      results: `./results/${this.name}/results.csv`,
+      results: `./results/${this.name}/Таблицы/results.csv`,
       incomplete: `./results/${this.name}/incomplete_queries.txt`,
-      intermediateResults: `./results/${this.name}/results_intermediate.csv`,
+      intermediateResults: `./results/${this.name}/Таблицы/results_intermediate.csv`,
       intermediateIncomplete: `./results/${this.name}/incomplete_queries_intermediate.txt`,
       screenshots: `./results/${this.name}/screenshots`,
-      serpFeatures: `./results/${this.name}/serp_features.csv`
+      serpFeatures: `./results/${this.name}/Таблицы/serp_features.csv`,
+      aiScreenshots: `./results/${this.name}/ai_screenshots`,
+      aiAnswers: `./results/${this.name}/Таблицы/ai_answers.csv`
     };
   }
 
@@ -148,6 +154,10 @@ export default class BaseParser {
 
       if (this.serpFeaturesEnabled && this.serpFeatureRows.length > 0) {
         saveSerpFeaturesToCSV(this.serpFeatureRows, paths.serpFeatures);
+      }
+
+      if (this.aiAnswerEnabled && this.aiAnswerRows.length > 0) {
+        saveAiAnswersToCSV(this.aiAnswerRows, paths.aiAnswers);
       }
     } catch (error) {
       console.error(`[${this.name}] Ошибка при сохранении промежуточных результатов:`, error.message);
@@ -282,6 +292,24 @@ export default class BaseParser {
             }
           }
 
+          // Раскрытие ИИ-ответа, скриншот и текст — опционально (this.aiAnswerEnabled).
+          // Делается ПОСЛЕ обычного скриншота и анализа: раскрытие меняет страницу.
+          if (this.aiAnswerEnabled) {
+            try {
+              const ai = await expandAiAnswer(page, this.name);
+              let shotPath = '';
+              if (ai.found) {
+                shotPath = await takeAiScreenshot(page, query, paths.aiScreenshots);
+                console.log(`${pauseMessage()}[${this.name}] 🤖 ИИ-ответ раскрыт (${ai.text.length} симв.), скриншот: ${shotPath}`);
+              } else {
+                console.log(`${pauseMessage()}[${this.name}] 🤖 ИИ-ответ в выдаче не найден`);
+              }
+              this.aiAnswerRows.push({ query, ...ai, screenshot: shotPath, checkedAt: new Date().toISOString() });
+            } catch (aiError) {
+              console.warn(`[${this.name}] ⚠️ Не удалось обработать ИИ-ответ: ${aiError.message}`);
+            }
+          }
+
           // Случайная задержка между запросами
           const delay = 2000 + Math.random() * 3000;
           console.log(`${pauseMessage()}[${this.name}] ⏱ Пауза ${Math.round(delay / 1000)} сек с имитацией движения мыши...`);
@@ -338,6 +366,11 @@ export default class BaseParser {
       if (this.serpFeaturesEnabled && this.serpFeatureRows.length > 0) {
         saveSerpFeaturesToCSV(this.serpFeatureRows, paths.serpFeatures);
         console.log(`[${this.name}] 🧩 Расширенные элементы выдачи сохранены в: ${paths.serpFeatures}`);
+      }
+
+      if (this.aiAnswerEnabled && this.aiAnswerRows.length > 0) {
+        saveAiAnswersToCSV(this.aiAnswerRows, paths.aiAnswers);
+        console.log(`[${this.name}] 🤖 ИИ-ответы сохранены в: ${paths.aiAnswers}`);
       }
 
       console.log(`\n[${this.name}] ✓ Парсинг завершен! Результаты сохранены в: ${paths.results}`);
