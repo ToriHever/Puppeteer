@@ -85,3 +85,7 @@ Parser_domen/domens.txt
 Parser_request/requests.txt
 multi_search_parser/scripts/queries.txt
 
+
+# Локальные рабочие списки
+Parser_Meta/domens.txt
+multi_search_parser/groups.txt

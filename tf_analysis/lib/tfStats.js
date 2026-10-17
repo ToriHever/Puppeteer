@@ -58,10 +58,23 @@ export function aggregateCompetitors(competitorPages, forcedLemmas = new Set()) 
 
   for (const lemma of allLemmas) {
     const counts = competitorPages.map(p => p.lemmaFreq.get(lemma) || 0);
-    const coverage = counts.filter(c => c > 0).length;
+    const nonZeroCounts = counts.filter(c => c > 0);
+    const coverage = nonZeroCounts.length;
     if (coverage < minCoverage && !forcedLemmas.has(lemma)) continue; // отфильтровываем редкие/шумовые леммы
 
-    lemmaStats.set(lemma, { ...stats(counts), coverage, totalPages: competitorPages.length });
+    // min/avg/median/max считаем только по конкурентам, которые СЛОВО
+    // ИСПОЛЬЗУЮТ. Если считать по всем (включая тех, у кого 0) — min почти
+    // всегда 0 (кто-то из топ-10 обычно слово не использует), и тогда
+    // "Недостаточно" физически недостижимо: 0 < 0 всегда false, значит
+    // страница без слова вовсе получала бы "Норма". Coverage отдельно
+    // показывает, сколько конкурентов вообще используют слово.
+    const statsBasis = nonZeroCounts.length > 0 ? nonZeroCounts : counts;
+
+    const headingCounts = competitorPages.map(p => p.headingFreq?.get(lemma) || 0);
+    const headingCoverage = headingCounts.filter(c => c > 0).length;
+    const avgHeading = headingCounts.reduce((a, b) => a + b, 0) / competitorPages.length;
+
+    lemmaStats.set(lemma, { ...stats(statsBasis), coverage, headingCoverage, avgHeading, totalPages: competitorPages.length });
   }
 
   const wordCounts = competitorPages.map(p => p.wordCount);
@@ -83,13 +96,14 @@ function classifyByRange(value, { min, max }) {
 }
 
 // Сравнивает свою страницу с агрегированной статистикой ТОП-10.
-// markedLemmas — леммы главных/LSI-слов, вручную заданных в query.txt: { main: Set, lsi: Set }
-export function compareOwnPage(ownPage, aggregated, markedLemmas = { main: new Set(), lsi: new Set() }) {
+// markedLemmas — леммы главных/LSI-слов из query.txt: { main: Set, lsi: Set } плюс autoMain/autoLsi — главные и LSI-слова,
+// найденные автоматически (приоритет у ручной разметки)
+export function compareOwnPage(ownPage, aggregated, markedLemmas = { main: new Set(), lsi: new Set(), autoMain: new Set(), autoLsi: new Set() }) {
   const lemmaComparison = [];
 
   for (const [lemma, competitorStat] of aggregated.lemmaStats.entries()) {
     const ownCount = ownPage.lemmaFreq.get(lemma) || 0;
-    const importance = markedLemmas.main.has(lemma) ? 'Главное' : markedLemmas.lsi.has(lemma) ? 'LSI' : '';
+    const importance = markedLemmas.main.has(lemma) ? 'Главное' : markedLemmas.autoMain?.has(lemma) ? 'Главное (авто)' : markedLemmas.lsi.has(lemma) ? 'LSI' : markedLemmas.autoLsi?.has(lemma) ? 'LSI (авто)' : '';
     lemmaComparison.push({
       lemma,
       importance,
@@ -99,13 +113,16 @@ export function compareOwnPage(ownPage, aggregated, markedLemmas = { main: new S
       medianCompetitor: competitorStat.median,
       maxCompetitor: competitorStat.max,
       coverage: `${competitorStat.coverage}/${competitorStat.totalPages}`,
+      ownHeadingCount: ownPage.headingFreq?.get(lemma) || 0,
+      avgHeadingCompetitor: Number(competitorStat.avgHeading.toFixed(1)),
+      headingCoverage: `${competitorStat.headingCoverage}/${competitorStat.totalPages}`,
       recommendation: classifyByRange(ownCount, competitorStat)
     });
   }
 
   // Сортируем: сначала вручную помеченные слова (Главное, потом LSI), внутри группы — недо/переоптимизированные
   lemmaComparison.sort((a, b) => {
-    const importanceRank = { 'Главное': 0, 'LSI': 1, '': 2 };
+    const importanceRank = { 'Главное': 0, 'Главное (авто)': 1, 'LSI': 2, 'LSI (авто)': 3, '': 4 };
     if (importanceRank[a.importance] !== importanceRank[b.importance]) {
       return importanceRank[a.importance] - importanceRank[b.importance];
     }

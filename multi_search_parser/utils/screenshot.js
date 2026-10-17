@@ -30,9 +30,10 @@ function ensureDir(dir) {
  * @param {import('puppeteer').Page} page
  * @param {string} query - запрос, по которому получена текущая выдача
  * @param {string} screenshotsDir - папка для скриншотов
+ * @param {string} [suffix] - необязательная добавка к имени файла (например, ' ИИ')
  * @returns {Promise<string>} путь к сохранённому файлу
  */
-export async function takeSerpScreenshot(page, query, screenshotsDir) {
+export async function takeSerpScreenshot(page, query, screenshotsDir, suffix = '') {
   ensureDir(screenshotsDir);
 
   // Прокручиваем страницу до конца — часть блоков SERP дорисовывается
@@ -52,7 +53,12 @@ export async function takeSerpScreenshot(page, query, screenshotsDir) {
     });
   });
 
-  const label = `${sanitizeForFilename(query)} ${formatDateDDMMYYYY()}`;
+  // Возвращаемся наверх: иначе залипающая (fixed/sticky) шапка сайта попадёт
+  // в середину полного скриншота
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await new Promise((r) => setTimeout(r, 300));
+
+  const label = `${sanitizeForFilename(query)} ${formatDateDDMMYYYY()}${suffix}`;
   const filePath = path.join(screenshotsDir, `${label}.png`);
   await page.screenshot({ path: filePath, fullPage: true });
   return filePath;

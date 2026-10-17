@@ -28,7 +28,7 @@ async function writeCSV(filePath, header, rows) {
 
 // Сохраняет леммы (свои/мин/среднее/медиана/макс/покрытие/рекомендация)
 export async function saveLemmaReport(filePath, lemmaComparison) {
-  const header = 'Лемма,Важность,У вас,Мин ТОП-10,Среднее ТОП-10,Медиана ТОП-10,Макс ТОП-10,Покрытие,Рекомендация';
+  const header = 'Лемма,Важность,У вас,Мин ТОП-10,Среднее ТОП-10,Медиана ТОП-10,Макс ТОП-10,Покрытие,H1–H3 у вас,H1–H3 среднее ТОП-10,H1–H3 покрытие,Рекомендация';
   const rows = lemmaComparison.map(row => [
     escapeCSV(row.lemma),
     escapeCSV(row.importance),
@@ -38,9 +38,32 @@ export async function saveLemmaReport(filePath, lemmaComparison) {
     row.medianCompetitor,
     row.maxCompetitor,
     escapeCSV(row.coverage),
+    row.ownHeadingCount,
+    row.avgHeadingCompetitor,
+    escapeCSV(row.headingCoverage),
     escapeCSV(row.recommendation)
   ].join(','));
 
+  await writeCSV(filePath, header, rows);
+}
+
+// Сохраняет кластеры лемм (темы): по одной строке на лемму, с пометкой «Главное/LSI».
+// clusters — { words: [...], lsi: [...] } из clusterLemmas; в файл попадают оба разбиения.
+export async function saveClusterReport(filePath, clusters, lemmaComparison) {
+  const stat = new Map(lemmaComparison.map(r => [r.lemma, r]));
+  const header = 'Разбиение,Кластер,Тема,Лемма,Важность,Среднее ТОП-10,Покрытие,У вас';
+  const rows = [];
+  for (const [mode, label] of [['words', 'По словам (TF-IDF)'], ['lsi', 'По LSI (SVD)']]) {
+    for (const cluster of clusters[mode]) {
+      for (const item of cluster.items) {
+        const s = stat.get(item.lemma);
+        rows.push([
+          escapeCSV(label), cluster.id, escapeCSV(cluster.name), escapeCSV(item.lemma),
+          escapeCSV(item.importance), s ? s.avgCompetitor : '', escapeCSV(s ? s.coverage : ''), s ? s.ownCount : ''
+        ].join(','));
+      }
+    }
+  }
   await writeCSV(filePath, header, rows);
 }
 
@@ -64,13 +87,4 @@ export async function saveSummaryReport(filePath, { query, ownUrl, lengthSummary
   ].map(([k, v]) => `${escapeCSV(k)},${escapeCSV(v)}`);
 
   await writeCSV(filePath, header, rows);
-}
-
-export function slugifyQuery(query) {
-  return query
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-zа-яё0-9]+/gi, '_')
-    .replace(/^_+|_+$/g, '')
-    .slice(0, 60) || 'query';
 }

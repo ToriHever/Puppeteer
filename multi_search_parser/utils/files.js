@@ -97,6 +97,15 @@ function escapeCSV(value) {
   return str;
 }
 
+// Достаёт голый домен из URL (без www. и без пути) — для отдельной колонки в CSV
+function extractDomain(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./i, '');
+  } catch {
+    return '';
+  }
+}
+
 // Сохранение результатов в CSV
 export async function saveToCSV(results, filename, engineName = '') {
   try {
@@ -106,7 +115,7 @@ export async function saveToCSV(results, filename, engineName = '') {
     const uniqueFilename = getUniqueFilename(filename);
     
     // Заголовок CSV с description
-    const header = 'Запрос,Тип запроса,Поисковик,Позиция,Поз.Органика,Тип,Тип страницы,Заголовок,Description,URL\n';
+    const header = 'Запрос,Тип запроса,Поисковик,Позиция,Поз.Органика,Тип,Тип страницы,Заголовок,Description,URL,Домен\n';
 
     // Формируем строки CSV
     const rows = results.map(result => {
@@ -120,7 +129,8 @@ export async function saveToCSV(results, filename, engineName = '') {
         escapeCSV(result.pageType),
         escapeCSV(result.title),
         escapeCSV(result.description || ''),
-        escapeCSV(result.url)
+        escapeCSV(result.url),
+        escapeCSV(extractDomain(result.url))
       ].join(',');
     }).join('\n');
 

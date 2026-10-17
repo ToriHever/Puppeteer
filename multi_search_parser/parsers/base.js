@@ -7,8 +7,22 @@ import { isPaused, pauseMessage } from '../utils/hotkeys.js';
 import { detectQueryIntentByKeywords } from '../utils/queryIntent.js';
 import { takeSerpScreenshot } from '../utils/screenshot.js';
 import { saveSerpFeaturesToCSV } from '../utils/serpFeatures.js';
+import { expandAiAnswer, takeAiScreenshot, saveAiAnswersToCSV } from '../utils/aiAnswer.js';
+import { resolveGoogleGotoLinksInResults } from '../utils/resolveGoogleRedirects.js';
+import { determinePageType } from '../utils/pageClassifier.js';
 
 puppeteer.use(StealthPlugin());
+
+// Puppeteer сам сообщает такими сообщениями, что страница/вкладка умерла
+// (закрылась вручную, упал процесс рендера, и т.п.) — в этом случае нет
+// смысла продолжать работать с тем же объектом page, он больше не рабочий.
+function isFatalPageError(error) {
+  const msg = error?.message || '';
+  return /session closed/i.test(msg)
+    || /detached frame/i.test(msg)
+    || /target closed/i.test(msg)
+    || /page has been closed/i.test(msg);
+}
 
 export const MODES = {
   COOKIE: 'cookie',
@@ -29,6 +43,9 @@ export default class BaseParser {
     // боковая панель, похожие вопросы) — тоже опция, включается по желанию
     this.serpFeaturesEnabled = !!options.serpFeatures;
     this.serpFeatureRows = [];
+    // Раскрытие ИИ-ответа (Обзор от ИИ / Нейро) + скриншот + текст в таблицу
+    this.aiAnswerEnabled = !!options.aiAnswer;
+    this.aiAnswerRows = [];
   }
 
   // Метод для получения конфигурации (переопределяется в наследниках)
@@ -52,12 +69,14 @@ export default class BaseParser {
     return {
       queries: './scripts/queries.txt',
       cookies: `./scripts/cookies/${this.name}.json`,
-      results: `./results/${this.name}/results.csv`,
+      results: `./results/${this.name}/Таблицы/results.csv`,
       incomplete: `./results/${this.name}/incomplete_queries.txt`,
-      intermediateResults: `./results/${this.name}/results_intermediate.csv`,
+      intermediateResults: `./results/${this.name}/Таблицы/results_intermediate.csv`,
       intermediateIncomplete: `./results/${this.name}/incomplete_queries_intermediate.txt`,
       screenshots: `./results/${this.name}/screenshots`,
-      serpFeatures: `./results/${this.name}/serp_features.csv`
+      serpFeatures: `./results/${this.name}/Таблицы/serp_features.csv`,
+      aiScreenshots: `./results/${this.name}/ai_screenshots`,
+      aiAnswers: `./results/${this.name}/Таблицы/ai_answers.csv`
     };
   }
 
@@ -88,6 +107,17 @@ export default class BaseParser {
     }
   }
 
+  // Пересчитывает pageType по финальному URL — вызывать ПОСЛЕ распаковки
+  // google.com/goto?url=... (determinePageType, вызванный раньше, во время
+  // самой экстракции в page.evaluate, видел бы ещё не распакованную ссылку:
+  // hostname=google.com, path=/goto — ни один паттерн не подходит, и почти
+  // все результаты Google получали бы "Непонятная").
+  reclassifyPageTypes(results) {
+    for (const result of results) {
+      result.pageType = determinePageType(result.url);
+    }
+  }
+
   // Добавление типа запроса к результатам
   addQueryTypeToResults(results) {
     const uniqueQueries = [...new Set(results.map(r => r.query))];
@@ -108,8 +138,10 @@ export default class BaseParser {
   async saveIntermediateResults() {
     try {
       const paths = this.getPaths();
-      
+
       if (this.results.length > 0) {
+        await resolveGoogleGotoLinksInResults(this.results);
+        this.reclassifyPageTypes(this.results);
         const resultsWithQueryType = this.addQueryTypeToResults(this.results);
         await saveToCSV(resultsWithQueryType, paths.intermediateResults, this.name);
         console.log(`\n💾 [${this.name}] Промежуточные результаты сохранены`);
@@ -122,6 +154,10 @@ export default class BaseParser {
 
       if (this.serpFeaturesEnabled && this.serpFeatureRows.length > 0) {
         saveSerpFeaturesToCSV(this.serpFeatureRows, paths.serpFeatures);
+      }
+
+      if (this.aiAnswerEnabled && this.aiAnswerRows.length > 0) {
+        saveAiAnswersToCSV(this.aiAnswerRows, paths.aiAnswers);
       }
     } catch (error) {
       console.error(`[${this.name}] Ошибка при сохранении промежуточных результатов:`, error.message);
@@ -170,7 +206,7 @@ export default class BaseParser {
       }
 
       this.browser = await puppeteer.launch(launchOptions);
-      const page = await this.browser.newPage();
+      let page = await this.browser.newPage();
 
       // Настраиваем браузер
       await configureBrowser(page, this.mode === MODES.COOKIE ? cookies : [], config);
@@ -256,6 +292,24 @@ export default class BaseParser {
             }
           }
 
+          // Раскрытие ИИ-ответа, скриншот и текст — опционально (this.aiAnswerEnabled).
+          // Делается ПОСЛЕ обычного скриншота и анализа: раскрытие меняет страницу.
+          if (this.aiAnswerEnabled) {
+            try {
+              const ai = await expandAiAnswer(page, this.name);
+              let shotPath = '';
+              if (ai.found) {
+                shotPath = await takeAiScreenshot(page, query, paths.aiScreenshots);
+                console.log(`${pauseMessage()}[${this.name}] 🤖 ИИ-ответ раскрыт (${ai.text.length} симв.), скриншот: ${shotPath}`);
+              } else {
+                console.log(`${pauseMessage()}[${this.name}] 🤖 ИИ-ответ в выдаче не найден`);
+              }
+              this.aiAnswerRows.push({ query, ...ai, screenshot: shotPath, checkedAt: new Date().toISOString() });
+            } catch (aiError) {
+              console.warn(`[${this.name}] ⚠️ Не удалось обработать ИИ-ответ: ${aiError.message}`);
+            }
+          }
+
           // Случайная задержка между запросами
           const delay = 2000 + Math.random() * 3000;
           console.log(`${pauseMessage()}[${this.name}] ⏱ Пауза ${Math.round(delay / 1000)} сек с имитацией движения мыши...`);
@@ -268,8 +322,41 @@ export default class BaseParser {
         } catch (error) {
           console.error(`[${this.name}] ❌ Ошибка при обработке запроса "${query}":`, error.message);
           this.incompleteQueries.push(query);
+
+          // Страница умерла (закрылась/упала) — переиспользовать её дальше
+          // бессмысленно, все следующие запросы будут падать с той же
+          // ошибкой. Пробуем открыть новую вкладку и продолжить со
+          // следующего запроса; если браузер тоже недоступен — прекращаем.
+          if (isFatalPageError(error) || page.isClosed()) {
+            console.warn(`[${this.name}] ⚠️ Вкладка браузера недоступна (закрыта/упала). Пробую открыть новую...`);
+            try {
+              if (!this.browser.isConnected()) {
+                throw new Error('Браузер отключён/закрыт');
+              }
+              page = await this.browser.newPage();
+              await configureBrowser(page, this.mode === MODES.COOKIE ? cookies : [], config);
+              console.log(`[${this.name}] ✓ Новая вкладка открыта, продолжаю со следующего запроса`);
+            } catch (recoveryError) {
+              const remaining = queries.length - i - 1;
+              console.error(`[${this.name}] ❌ Не удалось восстановить браузер: ${recoveryError.message}`);
+              console.log(`[${this.name}] ⏹ Останавливаю обработку — браузер недоступен. Оставшихся запросов: ${remaining}`);
+              for (let j = i + 1; j < queries.length; j++) {
+                this.incompleteQueries.push(queries[j]);
+              }
+              break;
+            }
+          }
         }
       }
+
+      // Google иногда отдаёт ссылки обёрнутыми в google.com/goto?url=... —
+      // распаковываем их ПОСЛЕ основного цикла (простой fetch, без браузера),
+      // чтобы не трогать логику сбора данных внутри searchQuery()
+      await resolveGoogleGotoLinksInResults(this.results);
+
+      // pageType считался ещё по обёрнутой ссылке (google.com/goto) — теперь,
+      // когда URL распакован, пересчитываем его по-настоящему
+      this.reclassifyPageTypes(this.results);
 
       // Сохраняем результаты
       const resultsWithQueryType = this.addQueryTypeToResults(this.results);
@@ -279,6 +366,11 @@ export default class BaseParser {
       if (this.serpFeaturesEnabled && this.serpFeatureRows.length > 0) {
         saveSerpFeaturesToCSV(this.serpFeatureRows, paths.serpFeatures);
         console.log(`[${this.name}] 🧩 Расширенные элементы выдачи сохранены в: ${paths.serpFeatures}`);
+      }
+
+      if (this.aiAnswerEnabled && this.aiAnswerRows.length > 0) {
+        saveAiAnswersToCSV(this.aiAnswerRows, paths.aiAnswers);
+        console.log(`[${this.name}] 🤖 ИИ-ответы сохранены в: ${paths.aiAnswers}`);
       }
 
       console.log(`\n[${this.name}] ✓ Парсинг завершен! Результаты сохранены в: ${paths.results}`);

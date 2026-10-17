@@ -101,7 +101,7 @@ function parseSerpFeaturesArg() {
 function selectSerpFeaturesOption() {
   return new Promise((resolve) => {
     console.log('\n🧩 Анализировать расширенные элементы выдачи (ИИ-обзор, картинки, видео, боковая панель, похожие вопросы)?');
-    console.log('   (сохраняются в results/<движок>/serp_features.csv)');
+    console.log('   (сохраняются в results/<движок>/Таблицы/serp_features.csv)');
     console.log('1. Да');
     console.log('2. Нет\n');
     console.log('Выберите (1 или 2): ');
@@ -113,6 +113,38 @@ function selectSerpFeaturesOption() {
         process.stdin.removeListener('keypress', onKeypress);
         const enabled = str === '1';
         console.log(`\n✓ Анализ расширенных элементов: ${enabled ? 'включён' : 'выключен'}\n`);
+        resolve(enabled);
+      }
+    };
+
+    process.stdin.on('keypress', onKeypress);
+  });
+}
+
+// Флаг раскрытия ИИ-ответа: --ai-answer / --no-ai-answer
+function parseAiAnswerArg() {
+  const args = process.argv.slice(2);
+  if (args.includes('--ai-answer')) return true;
+  if (args.includes('--no-ai-answer')) return false;
+  return null;
+}
+
+// Интерактивный вопрос: раскрывать ли ИИ-ответ, скринить и сохранять текст
+function selectAiAnswerOption() {
+  return new Promise((resolve) => {
+    console.log('\n🤖 Раскрывать ИИ-ответ (Обзор от ИИ / Нейро), скринить и сохранять текст?');
+    console.log('   (текст: results/<движок>/Таблицы/ai_answers.csv, скриншоты: results/<движок>/ai_screenshots/)');
+    console.log('1. Да');
+    console.log('2. Нет\n');
+    console.log('Выберите (1 или 2): ');
+
+    let resolved = false;
+    const onKeypress = (str) => {
+      if (!resolved && (str === '1' || str === '2')) {
+        resolved = true;
+        process.stdin.removeListener('keypress', onKeypress);
+        const enabled = str === '1';
+        console.log(`\n✓ ИИ-ответ: ${enabled ? 'включён' : 'выключен'}\n`);
         resolve(enabled);
       }
     };
@@ -159,7 +191,10 @@ async function main() {
     const serpFeaturesArg = parseSerpFeaturesArg();
     const serpFeaturesEnabled = serpFeaturesArg !== null ? serpFeaturesArg : await selectSerpFeaturesOption();
 
-    const parserOptions = { screenshots: screenshotsEnabled, serpFeatures: serpFeaturesEnabled };
+    const aiAnswerArg = parseAiAnswerArg();
+    const aiAnswerEnabled = aiAnswerArg !== null ? aiAnswerArg : await selectAiAnswerOption();
+
+    const parserOptions = { screenshots: screenshotsEnabled, serpFeatures: serpFeaturesEnabled, aiAnswer: aiAnswerEnabled };
 
     switch(choice) {
       case '1':
