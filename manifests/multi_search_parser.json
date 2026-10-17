@@ -1,22 +1,26 @@
 {
   "id": "multi_search_parser",
   "name": "Multi Search Parser (Yandex & Google)",
-  "description": "Парсит выдачу Яндекса и/или Google по списку запросов, классифицирует коммерческость, опционально делает скриншоты и анализирует SERP-фичи (ИИ-обзор, картинки, видео, панель знаний).",
+  "description": "Парсит выдачу Яндекса и/или Google по списку запросов, классифицирует коммерческость, опционально делает скриншоты, анализирует SERP-фичи (ИИ-обзор, картинки, видео, панель знаний) и раскрывает/сохраняет текст ИИ-ответа.",
   "cwd": "multi_search_parser",
   "command": "node",
   "args": ["index.js"],
   "install": { "needed": false },
   "inputs": [
     { "key": "engine", "label": "Поисковик", "kind": "select", "options": ["yandex", "google", "both-seq", "both-par"], "required": true, "cliFlag": "--engine=" },
+    { "key": "cookieMode", "label": "С куками или инкогнито", "kind": "select", "required": false },
     { "key": "screenshots", "label": "Делать скриншоты выдачи", "kind": "flag", "cliFlag": "--screenshots/--no-screenshots", "required": false },
-    { "key": "serpFeatures", "label": "Анализировать SERP-фичи", "kind": "flag", "cliFlag": "--serp-features/--no-serp-features", "required": false },
+    { "key": "serpFeatures", "label": "Анализировать расширенные элементы выдачи (ИИ-обзор, картинки, видео, панель знаний)", "kind": "flag", "cliFlag": "--serp-features/--no-serp-features", "required": false },
+    { "key": "aiAnswer", "label": "Раскрывать и сохранять текст ИИ-ответа", "kind": "flag", "cliFlag": "--ai-answer/--no-ai-answer", "required": false },
     { "key": "queries", "label": "Запросы (по одному на строку)", "kind": "file", "path": "scripts/queries.txt", "required": true }
   ],
   "env": [],
   "outputs": [
-    { "path": "results/<engine>/results.csv", "kind": "csv" },
+    { "path": "results/<engine>/Таблицы/results.csv", "kind": "csv", "description": "включает колонку Домен (распакован из google.com/goto?url=)" },
+    { "path": "results/<engine>/Таблицы/serp_features.csv", "kind": "csv", "description": "только если включён анализ SERP-фич" },
+    { "path": "results/<engine>/Таблицы/ai_answers.csv", "kind": "csv", "description": "только если включено раскрытие ИИ-ответа" },
     { "path": "results/<engine>/screenshots/*.png", "kind": "image", "description": "только если включены скриншоты" },
-    { "path": "results/<engine>/serp_features.csv", "kind": "csv", "description": "только если включён анализ SERP-фич" }
+    { "path": "results/<engine>/ai_screenshots/*.png", "kind": "image", "description": "только если включено раскрытие ИИ-ответа" }
   ],
   "execution": {
     "headless": false,
@@ -26,6 +30,8 @@
   },
   "knownIssues": [
     "both-par запускает два браузера параллельно — выше нагрузка на память, учесть при планировании параллельных запусков на VDS.",
-    "Промежуточные/незавершённые запросы сохраняются в results/<engine>/incomplete_queries*.txt для возобновления после Ctrl+C."
+    "Промежуточные/незавершённые запросы сохраняются в results/<engine>/incomplete_queries*.txt для возобновления после Ctrl+C (при выходе из гита — куки и эти локальные списки теперь в .gitignore, на диске остаются как обычные рабочие файлы).",
+    "Детекция ИИ-ответа и SERP-фич для Google — best-effort (разметка обфусцирована, не проверялась вживую из-за частых капч); для Yandex надёжнее (явные data-атрибуты).",
+    "sort_screenshots.js/.bat — отдельный вспомогательный скрипт для сортировки уже сделанных скриншотов, не часть основного запуска index.js."
   ]
 }

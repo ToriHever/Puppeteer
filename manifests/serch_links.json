@@ -1,22 +1,27 @@
 {
   "id": "serch_links",
   "name": "Serch Links",
-  "description": "Проверяет список страниц (или находит их через поиск в Google) на упоминания/ссылки на заданный список целевых доменов, с датами публикации/изменения.",
+  "description": "Проверяет страницы на ссылки/текстовые упоминания целевых доменов (TARGET_DOMAINS) — либо по готовому списку URL, либо находя их самостоятельно через поиск в Google по запросу, либо перебором доменов × слов.",
   "cwd": "serch_links",
   "command": "node",
   "args": ["parser.js"],
   "install": { "needed": true, "command": "npm install" },
   "inputs": [
-    { "key": "query", "label": "Поисковый запрос (необязательно, позиционный аргумент)", "kind": "text", "required": false },
-    { "key": "pagesLimit", "label": "Лимит страниц Google (--pages=N)", "kind": "text", "required": false, "cliFlag": "--pages=" },
-    { "key": "queryFile", "label": "Запрос из файла (режим поиска)", "kind": "file", "path": "query.txt", "required": false },
-    { "key": "pagesFile", "label": "Список страниц (режим списка, по одной на строку)", "kind": "file", "path": "pages.txt", "required": false }
+    { "key": "pagesLimit", "label": "Лимит страниц выдачи Google на комбинацию (--pages=N, по умолчанию 10)", "kind": "text", "required": false, "cliFlag": "--pages=" },
+    { "key": "domains", "label": "Домены для проверки (режим 0, приоритетный; по одному на строку)", "kind": "file", "path": "domains.txt", "required": false },
+    { "key": "words", "label": "Слова/фразы для проверки на доменах (режим 0, общий список; по одной на строку)", "kind": "file", "path": "words.txt", "required": false },
+    { "key": "query", "label": "Поисковый запрос (режим 2, если domains+words не заданы)", "kind": "text", "required": false },
+    { "key": "queryFile", "label": "Запрос из файла (режим 2, альтернатива аргументу)", "kind": "file", "path": "query.txt", "required": false },
+    { "key": "pagesFile", "label": "Готовый список URL для проверки (режим 1, по одному на строку)", "kind": "file", "path": "pages.txt", "required": false },
+    { "key": "cookies", "label": "Cookies google.com (создаются/обновляются автоматически)", "kind": "file", "path": "scripts/cookies/google.json", "required": false }
   ],
   "env": [],
   "outputs": [
-    { "path": "Results/search_urls_<query>_<date>.csv", "kind": "csv", "description": "только в режиме поиска" },
-    { "path": "Results/results_<...>_<date>.csv", "kind": "csv", "description": "найденные совпадения" },
-    { "path": "Results/errors_<...>_<date>.csv", "kind": "csv", "description": "страницы, которые не загрузились" }
+    { "path": "Results/search_urls_domains_words_<дата>.csv", "kind": "csv", "description": "режим 0: сырой список со страниц до подтверждения" },
+    { "path": "Results/search_urls_<запрос>_<дата>.csv", "kind": "csv", "description": "режим 2: сырой список URL из выдачи" },
+    { "path": "Results/results_<...>_<дата>.csv", "kind": "csv", "description": "подтверждённые ссылки/упоминания, колонки: source_page, link_url, link_text, matched, page_date, snippet_date, checked_at" },
+    { "path": "Results/errors_<...>_<дата>.csv", "kind": "csv", "description": "страницы, которые не удалось проверить" },
+    { "path": "debug/", "kind": "dir", "description": "HTML-дампы выдачи при подозрении на смену вёрстки Google (без капчи)" }
   ],
   "execution": {
     "headless": false,
@@ -25,8 +30,9 @@
     "resumable": false
   },
   "knownIssues": [
-    "ИСПРАВЛЕНО: в serch_links/package.json добавлено \"type\": \"module\" — устраняет несовпадение с import-синтаксисом в parser.js.",
-    "Целевые домены (TARGET_DOMAINS) захардкожены в начале parser.js.",
-    "Приоритет входа: CLI-аргумент → query.txt → pages.txt — UI должен явно показывать, какой режим будет использован."
+    "ИСПРАВЛЕНО (уже на месте): serch_links/package.json содержит \"type\": \"module\".",
+    "Приоритет режимов: domains.txt+words.txt (режим 0) → query.txt/аргумент (режим 2) → pages.txt (режим 1). UI должен явно показывать, какой режим сработает, т.к. заполненные вместе файлы режима 0 перекрывают остальные.",
+    "Режим 0 (домены × слова) делает доменов × слов × страниц_выдачи запросов к Google — при большом списке это может быть много трафика/времени, стоит предупреждать в UI и предлагать снизить --pages.",
+    "TARGET_DOMAINS, TEXT_PATTERNS и EXCLUDED_DOMAINS захардкожены в начале parser.js — менять их можно только правкой кода."
   ]
 }
