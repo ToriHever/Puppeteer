@@ -7,15 +7,10 @@
   "args": ["wordstat-api.js"],
   "install": { "needed": false },
   "inputs": [
-    { "key": "requests", "label": "Запросы (по одному на строку)", "kind": "file", "path": "requests.txt", "required": true },
-    { "key": "mode", "label": "Режим (1-2)", "kind": "select", "required": true },
-    { "key": "format", "label": "Формат вывода (CSV/JSON)", "kind": "select", "required": true },
-    { "key": "variant", "label": "Вариант (1-4)", "kind": "select", "required": true },
-    { "key": "fromDate", "label": "Дата начала (если применимо)", "kind": "date", "required": false },
-    { "key": "toDate", "label": "Дата конца (если применимо)", "kind": "date", "required": false }
+    { "key": "requests", "label": "Запросы (по одному на строку)", "kind": "file", "path": "requests.txt", "required": true }
   ],
   "env": [
-    { "name": "WORDSTAT_API_TOKEN", "required": true, "file": ".env (в корне репозитория, НЕ в этой папке)" }
+    { "name": "WORDSTAT_API_TOKEN", "required": true, "file": ".env" }
   ],
   "outputs": [
     { "path": "Result/", "kind": "dir", "description": "CSV и/или JSON, имя файла зависит от выбранного формата/варианта" }
@@ -28,6 +23,7 @@
   },
   "knownIssues": [
     "env.example лежит внутри Parser_wordstat_api/, но скрипт на самом деле читает корневой .env (path.join(__dirname,'..','.env')) — не создавать отдельный .env в этой папке, он не будет использован.",
-    "Без WORDSTAT_API_TOKEN скрипт сразу завершается с ошибкой."
+    "Без WORDSTAT_API_TOKEN скрипт сразу завершается с ошибкой.",
+    "Режим/формат/вариант/даты полностью читаются через readline.question — CLI-аргументов нет. Убраны из inputs, отвечать через поле продолжения ввода (execution.blocking содержит interactive-menu)."
   ]
 }

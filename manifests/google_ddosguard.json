@@ -7,8 +7,6 @@
   "args": ["parser.js"],
   "install": { "needed": true, "command": "npm install" },
   "inputs": [
-    { "key": "mode", "label": "Режим: cookies или инкогнито", "kind": "select", "required": true },
-    { "key": "period", "label": "Период (1-7 или свой диапазон дат DD.MM.YYYY)", "kind": "select", "required": true },
     { "key": "cookies", "label": "Cookies google.com (JSON)", "kind": "file", "path": "scripts/cookies/google.json", "required": false, "cookieKey": "google.com" }
   ],
   "env": [],
@@ -24,6 +22,7 @@
   },
   "knownIssues": [
     "Поисковый запрос (SEARCH_QUERY) захардкожен в коде — изменить можно только правкой скрипта.",
-    "Хоткей паузы/помощи (P/H) и запрос дат через readline.question — нужна эмуляция интерактивного stdin в веб-UI."
+    "Режим (cookies/инкогнито) и период полностью читаются через readline.question — CLI-аргументов нет. Убраны из inputs: веб-UI должен отвечать на эти вопросы через поле продолжения ввода (execution.blocking содержит interactive-menu), а не собирать их в форме запуска.",
+    "Хоткей паузы/помощи (P/H) — тоже через stdin, эмулируется тем же полем продолжения ввода."
   ]
 }
