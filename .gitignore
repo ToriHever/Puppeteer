@@ -10,6 +10,7 @@ node_modules/
 !**/package.json
 !package-lock.json
 !**/package-lock.json
+!manifests/*.json
 
 # Результаты парсинга (папки — разные парсеры называют их по-разному)
 Results/

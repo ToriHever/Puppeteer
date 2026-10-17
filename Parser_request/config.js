@@ -1,11 +1,11 @@
 import path from 'path';
-import os from 'os';
+import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const USERNAME = os.userInfo().username;
-const BASE_PATH = path.join('C:/Users', USERNAME, 'Desktop/Puppeteer/Parser_request');
+const __filename = fileURLToPath(import.meta.url);
+const BASE_PATH = path.dirname(__filename);
 
 export const CONFIG = {
   // Учетные данные из переменных окружения

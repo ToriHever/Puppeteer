@@ -1,0 +1,28 @@
+{
+  "id": "clarity",
+  "name": "Clarity Heatmaps",
+  "description": "Логинится в Microsoft Clarity по сохранённым cookies и собирает статистику скролла/посетителей по списку URL.",
+  "cwd": "Clarity",
+  "command": "node",
+  "args": ["heatmaps.js"],
+  "install": { "needed": false },
+  "inputs": [
+    { "key": "urls", "label": "URL для анализа (по одному на строку)", "kind": "file", "path": "urls.txt", "required": true },
+    { "key": "cookies", "label": "Cookies clarity.microsoft.com (JSON, экспорт Puppeteer)", "kind": "file", "path": "clarity.microsoft.com.cookies.json", "required": false }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "Clarity.csv", "kind": "csv", "description": "URL, % прокрутки, # посетителей, % уходит (дозаписывается, не перезаписывается)" }
+  ],
+  "execution": {
+    "headless": false,
+    "interactive": false,
+    "blocking": ["manual-login"],
+    "resumable": true
+  },
+  "knownIssues": [
+    "Браузер не закрывается в конце скрипта — нужно будет завершать процесс по outputs/exit-коду, а не ждать закрытия окна.",
+    "Clarity project URL (ID проекта) захардкожен в коде — сменить проект нельзя без правки скрипта.",
+    "Без валидных cookies скрипт продолжает работу без логина (тихое вырождение результатов)."
+  ]
+}

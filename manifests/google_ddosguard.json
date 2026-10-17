@@ -1,0 +1,29 @@
+{
+  "id": "google_ddosguard",
+  "name": "Google DDoS-Guard SERP Parser",
+  "description": "Собирает все органические результаты Google по захардкоженному запросу (site:softline.ru/blog/ ddos) с пагинацией за выбранный период.",
+  "cwd": "google_ddosguard",
+  "command": "node",
+  "args": ["parser.js"],
+  "install": { "needed": true, "command": "npm install" },
+  "inputs": [
+    { "key": "mode", "label": "Режим: cookies или инкогнито", "kind": "select", "required": true },
+    { "key": "period", "label": "Период (1-7 или свой диапазон дат DD.MM.YYYY)", "kind": "select", "required": true },
+    { "key": "cookies", "label": "Cookies google.com (JSON)", "kind": "file", "path": "scripts/cookies/google.json", "required": false }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "results/ddosguard[_period]_<timestamp>.csv", "kind": "csv", "description": "Домен, Страница, Позиция, даты, URL, Заголовок, Описание" },
+    { "path": "debug/", "kind": "dir", "description": "HTML/JSON дампы при CONFIG.debug=true (по умолчанию включено)" }
+  ],
+  "execution": {
+    "headless": false,
+    "interactive": true,
+    "blocking": ["interactive-menu", "manual-captcha"],
+    "resumable": false
+  },
+  "knownIssues": [
+    "Поисковый запрос (SEARCH_QUERY) захардкожен в коде — изменить можно только правкой скрипта.",
+    "Хоткей паузы/помощи (P/H) и запрос дат через readline.question — нужна эмуляция интерактивного stdin в веб-UI."
+  ]
+}

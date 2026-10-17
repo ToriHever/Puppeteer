@@ -1,0 +1,32 @@
+{
+  "id": "serch_links",
+  "name": "Serch Links",
+  "description": "Проверяет список страниц (или находит их через поиск в Google) на упоминания/ссылки на заданный список целевых доменов, с датами публикации/изменения.",
+  "cwd": "serch_links",
+  "command": "node",
+  "args": ["parser.js"],
+  "install": { "needed": true, "command": "npm install" },
+  "inputs": [
+    { "key": "query", "label": "Поисковый запрос (необязательно, позиционный аргумент)", "kind": "text", "required": false },
+    { "key": "pagesLimit", "label": "Лимит страниц Google (--pages=N)", "kind": "text", "required": false, "cliFlag": "--pages=" },
+    { "key": "queryFile", "label": "Запрос из файла (режим поиска)", "kind": "file", "path": "query.txt", "required": false },
+    { "key": "pagesFile", "label": "Список страниц (режим списка, по одной на строку)", "kind": "file", "path": "pages.txt", "required": false }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "Results/search_urls_<query>_<date>.csv", "kind": "csv", "description": "только в режиме поиска" },
+    { "path": "Results/results_<...>_<date>.csv", "kind": "csv", "description": "найденные совпадения" },
+    { "path": "Results/errors_<...>_<date>.csv", "kind": "csv", "description": "страницы, которые не загрузились" }
+  ],
+  "execution": {
+    "headless": false,
+    "interactive": false,
+    "blocking": ["manual-captcha"],
+    "resumable": false
+  },
+  "knownIssues": [
+    "ИСПРАВЛЕНО: в serch_links/package.json добавлено \"type\": \"module\" — устраняет несовпадение с import-синтаксисом в parser.js.",
+    "Целевые домены (TARGET_DOMAINS) захардкожены в начале parser.js.",
+    "Приоритет входа: CLI-аргумент → query.txt → pages.txt — UI должен явно показывать, какой режим будет использован."
+  ]
+}

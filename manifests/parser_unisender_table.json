@@ -1,0 +1,27 @@
+{
+  "id": "parser_unisender_table",
+  "name": "Unisender CDP Table Export",
+  "description": "Открывает конкретный список CDP в Unisender и выгружает таблицу со страницы в CSV. Требует ручного логина в открывшемся браузере.",
+  "cwd": "Parser_unisender",
+  "command": "node",
+  "args": ["unisender_table.js"],
+  "install": { "needed": false },
+  "inputs": [
+    { "key": "cookies", "label": "Cookies Unisender (JSON)", "kind": "file", "path": "cookiesWordstat.json", "required": false }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "contacts.csv", "kind": "csv" }
+  ],
+  "execution": {
+    "headless": false,
+    "interactive": false,
+    "blocking": ["manual-login"],
+    "resumable": false
+  },
+  "knownIssues": [
+    "Самый 'ручной' скрипт в репозитории: нужно залогиниться самому в открывшемся браузере, затем нажать Enter в консоли — на headless VDS это требует либо видимого remote-desktop/VNC доступа к Chrome, либо агента на ПК пользователя (см. идею 'лёгкого агента' из обсуждения архитектуры).",
+    "ID списка CDP (1077) захардкожен в URL — для другого списка нужно менять код.",
+    "Выходной файл contacts.csv отличается от unisender_contacts.csv у unisender.js — не перепутать назначения в UI."
+  ]
+}

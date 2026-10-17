@@ -1,0 +1,27 @@
+{
+  "id": "screen_serp",
+  "name": "Screen SERP",
+  "description": "Открывает каждый запрос из списка в видимом браузере (1920x1080, ru locale) и делает скриншот выдачи.",
+  "cwd": "Screen_SERP",
+  "command": "node",
+  "args": ["screen_serp.js"],
+  "install": { "needed": false },
+  "inputs": [
+    { "key": "requests", "label": "Запросы (по одному на строку)", "kind": "file", "path": "request.txt", "required": true }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "(не подтверждено — см. known issues)", "kind": "image" }
+  ],
+  "execution": {
+    "headless": false,
+    "interactive": false,
+    "blocking": ["notepad-edit"],
+    "resumable": false
+  },
+  "knownIssues": [
+    "Перед запуском открывает request.txt в notepad.exe и ждёт его закрытия — Windows-only, не заработает headless на VDS без замены на редактирование файла в веб-UI.",
+    "Точный путь сохранения скриншотов не подтверждён при обзоре (нужна точечная проверка кода перед вводом в эксплуатацию).",
+    "Каждый запуск создаёт одноразовый временный профиль Chrome в os.tmpdir() — сессия/cookies не сохраняются между запусками."
+  ]
+}

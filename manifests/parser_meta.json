@@ -1,0 +1,28 @@
+{
+  "id": "parser_meta",
+  "name": "Parser Meta",
+  "description": "Загружает до 5 URL параллельно и извлекает meta-теги, HTTP-статус, цепочку редиректов и полноразмерный скриншот каждой страницы в CSV.",
+  "cwd": "Parser_Meta",
+  "command": "node",
+  "args": ["parser_meta.js"],
+  "install": { "needed": false },
+  "inputs": [
+    { "key": "urls", "label": "URL/домены (по одному на строку, # — комментарий)", "kind": "file", "path": "urls_meta.txt", "required": true }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "Result/meta_data_<date>.csv", "kind": "csv" },
+    { "path": "Result/screenshots/*.png", "kind": "image" }
+  ],
+  "execution": {
+    "headless": false,
+    "interactive": false,
+    "blocking": ["notepad-edit", "manual-captcha"],
+    "resumable": false
+  },
+  "knownIssues": [
+    "Скрипт перед запуском открывает входной файл в Notepad и ждёт его закрытия (openFileAndWait) — на headless VDS это не сработает, нужно заменить на редактирование файла через веб-UI перед запуском.",
+    "run_parser_meta.sh (bash-обёртка) ссылается на domens.txt, а сам parser_meta.js читает urls_meta.txt — несовпадение имён, авторитетным считать urls_meta.txt.",
+    "BROWSER_HEADLESS: false зашито в коде с комментарием 'needed for captcha'."
+  ]
+}

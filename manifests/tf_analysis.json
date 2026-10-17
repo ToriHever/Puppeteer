@@ -1,0 +1,36 @@
+{
+  "id": "tf_analysis",
+  "name": "TF Analysis (SEO)",
+  "description": "Сравнивает свою страницу с вручную сохранёнными страницами конкурентов по запросу: количество слов/символов и частота лемм, чтобы найти недо/переоптимизированные ключевые слова.",
+  "cwd": "tf_analysis",
+  "command": "node",
+  "args": ["index.js"],
+  "install": { "needed": false },
+  "inputs": [
+    {
+      "key": "task",
+      "label": "Папка задачи в input/ (query.txt + own.html + HTML конкурентов)",
+      "kind": "file",
+      "path": "input/<имя-задачи>/",
+      "required": true
+    }
+  ],
+  "env": [
+    { "name": "MYSTEM_PATH", "required": false, "file": "не из .env — опциональная переменная среды; по умолчанию ищет tf_analysis/bin/mystem(.exe)" }
+  ],
+  "outputs": [
+    { "path": "results/<slug-запроса>/lemma_report.csv", "kind": "csv" },
+    { "path": "results/<slug-запроса>/summary.csv", "kind": "csv" }
+  ],
+  "execution": {
+    "headless": true,
+    "interactive": false,
+    "blocking": [],
+    "resumable": true
+  },
+  "knownIssues": [
+    "Входные данные — не плоский текстовый файл: это папка input/<задача>/ с query.txt + own.html + произвольным числом *.html конкурентов, сохранённых вручную (Ctrl+S) заранее, чтобы обойти антибот-защиту. Веб-UI должен поддерживать загрузку нескольких файлов в подпапку, а не одно текстовое поле.",
+    "Бинарник Mystem (лемматизатор) не устанавливается через npm — его нужно скачать отдельно и положить в tf_analysis/bin/.",
+    "В репозитории есть неиспользуемый legacy-путь автопарсинга (lib/fetchTop10.js, scripts/tasks.txt) — README явно не рекомендует его использовать."
+  ]
+}

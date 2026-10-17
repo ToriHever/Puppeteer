@@ -1,0 +1,31 @@
+{
+  "id": "multi_search_parser",
+  "name": "Multi Search Parser (Yandex & Google)",
+  "description": "Парсит выдачу Яндекса и/или Google по списку запросов, классифицирует коммерческость, опционально делает скриншоты и анализирует SERP-фичи (ИИ-обзор, картинки, видео, панель знаний).",
+  "cwd": "multi_search_parser",
+  "command": "node",
+  "args": ["index.js"],
+  "install": { "needed": false },
+  "inputs": [
+    { "key": "engine", "label": "Поисковик", "kind": "select", "options": ["yandex", "google", "both-seq", "both-par"], "required": true, "cliFlag": "--engine=" },
+    { "key": "screenshots", "label": "Делать скриншоты выдачи", "kind": "flag", "cliFlag": "--screenshots/--no-screenshots", "required": false },
+    { "key": "serpFeatures", "label": "Анализировать SERP-фичи", "kind": "flag", "cliFlag": "--serp-features/--no-serp-features", "required": false },
+    { "key": "queries", "label": "Запросы (по одному на строку)", "kind": "file", "path": "scripts/queries.txt", "required": true }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "results/<engine>/results.csv", "kind": "csv" },
+    { "path": "results/<engine>/screenshots/*.png", "kind": "image", "description": "только если включены скриншоты" },
+    { "path": "results/<engine>/serp_features.csv", "kind": "csv", "description": "только если включён анализ SERP-фич" }
+  ],
+  "execution": {
+    "headless": false,
+    "interactive": true,
+    "blocking": ["interactive-menu", "manual-captcha"],
+    "resumable": true
+  },
+  "knownIssues": [
+    "both-par запускает два браузера параллельно — выше нагрузка на память, учесть при планировании параллельных запусков на VDS.",
+    "Промежуточные/незавершённые запросы сохраняются в results/<engine>/incomplete_queries*.txt для возобновления после Ctrl+C."
+  ]
+}

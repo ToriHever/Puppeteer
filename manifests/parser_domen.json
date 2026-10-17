@@ -1,0 +1,28 @@
+{
+  "id": "parser_domen",
+  "name": "Parser Domen",
+  "description": "Проверяет список доменов через check-host.net, определяя хостинг-провайдера/организацию (например, наличие DDoS-защиты), и шлёт уведомление в Telegram по завершении.",
+  "cwd": "Parser_domen",
+  "command": "node",
+  "args": ["ParserDomen.js"],
+  "install": { "needed": false },
+  "inputs": [
+    { "key": "domens", "label": "Домены (по одному на строку)", "kind": "file", "path": "domens.txt", "required": true }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "Results/<basename>[_N].csv", "kind": "csv", "description": "Домен, Провайдер, Организация" },
+    { "path": "Results/log.txt", "kind": "log" }
+  ],
+  "execution": {
+    "headless": true,
+    "interactive": false,
+    "blocking": [],
+    "resumable": false
+  },
+  "knownIssues": [
+    "domens.txt сейчас отсутствует в папке — его нужно создать/загрузить через UI перед первым запуском, иначе скрипт падает с 'domens.txt пуст'.",
+    "ИСПРАВЛЕНО: ../Notifications_Telegram.js теперь читает TELEGRAM_BOT_TOKEN/TELEGRAM_CHAT_ID из корневого .env вместо захардкоженных значений.",
+    "Параллелизм ограничен CONCURRENCY=2 в коде."
+  ]
+}

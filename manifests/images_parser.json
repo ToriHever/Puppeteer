@@ -1,0 +1,26 @@
+{
+  "id": "images_parser",
+  "name": "Images Parser",
+  "description": "Проверяет размеры изображений (натуральный vs отрисованный размер, соотношение сторон) на захардкоженном списке URL блога ddos-guard.ru на трёх разрешениях (desktop/tablet/mobile).",
+  "cwd": ".",
+  "command": "node",
+  "args": ["images-parser.cjs"],
+  "install": { "needed": false },
+  "inputs": [],
+  "env": [],
+  "outputs": [
+    { "path": "images-report.csv", "kind": "csv" },
+    { "path": "images-report.json", "kind": "json" }
+  ],
+  "execution": {
+    "headless": true,
+    "interactive": false,
+    "blocking": [],
+    "resumable": false
+  },
+  "knownIssues": [
+    "Список URL зашит прямо в коде (массив литералов) — изменить целевые страницы можно только правкой скрипта, нет входного файла.",
+    "Файл не отслеживается git (untracked) — перед включением в манифесты/реестр стоит решить, коммитить его или оставить как есть.",
+    ".cjs специально обходит \"type\":\"module\" из корневого package.json, так как использует require()."
+  ]
+}

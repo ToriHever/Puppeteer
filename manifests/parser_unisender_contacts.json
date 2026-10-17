@@ -1,0 +1,27 @@
+{
+  "id": "parser_unisender_contacts",
+  "name": "Unisender Contacts Export",
+  "description": "Выгружает список контактов Unisender через браузер, используя сохранённые cookies с автоматическим повторным логином по login.txt при протухшей сессии.",
+  "cwd": "Parser_unisender",
+  "command": "node",
+  "args": ["unisender.js"],
+  "install": { "needed": false },
+  "inputs": [
+    { "key": "cookies", "label": "Cookies Unisender (JSON)", "kind": "file", "path": "cookiesWordstat.json", "required": true },
+    { "key": "login", "label": "Логин/пароль для повторного входа", "kind": "file", "path": "login.txt", "required": false }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "unisender_contacts.csv", "kind": "csv" }
+  ],
+  "execution": {
+    "headless": false,
+    "interactive": true,
+    "blocking": ["interactive-menu"],
+    "resumable": false
+  },
+  "knownIssues": [
+    "При ошибке загрузки cookies скрипт блокируется на readline.question() с просьбой устранить ошибку и нажать Enter — нужна эмуляция stdin в веб-UI.",
+    "Файл cookiesWordstat.json назван по старой привычке (от Wordstat-парсера), но на деле хранит сессию Unisender — не перепутать с Parser_request/Parser_Alisa."
+  ]
+}

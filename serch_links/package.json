@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "Парсер ссылок по домену через Puppeteer",
   "main": "parser.js",
+  "type": "module",
   "scripts": {
     "start": "node parser.js"
   },

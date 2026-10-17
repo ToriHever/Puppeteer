@@ -1,0 +1,28 @@
+{
+  "id": "parser_alisa",
+  "name": "Parser Alisa",
+  "description": "Открывает список URL (страницы Алисы/нейро-поиска Яндекса) и собирает вопрос/ответ/источники в CSV.",
+  "cwd": "Parser_Alisa",
+  "command": "node",
+  "args": ["parser.js"],
+  "install": { "needed": false },
+  "inputs": [
+    { "key": "links", "label": "URL для парсинга (по одному на строку)", "kind": "file", "path": "links.txt", "required": true },
+    { "key": "cookies", "label": "Cookies Яндекса (JSON)", "kind": "file", "path": "cookiesWordstat.json", "required": true }
+  ],
+  "env": [],
+  "outputs": [
+    { "path": "result.csv", "kind": "csv", "description": "url, question, answer, sources" }
+  ],
+  "execution": {
+    "headless": true,
+    "interactive": false,
+    "blocking": [],
+    "resumable": false
+  },
+  "knownIssues": [
+    "Без файла cookiesWordstat.json скрипт, судя по коду, падает с ошибкой — файл нужен заранее, не создаётся автоматически.",
+    "Записи с нерешённой капчей помечаются CAPTCHA_TIMEOUT в CSV, а не блокируют выполнение — проверить вручную после запуска.",
+    "debug_page.html в папке — побочный дамп для отладки, не документированный выход."
+  ]
+}

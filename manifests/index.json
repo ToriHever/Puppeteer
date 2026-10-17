@@ -1,0 +1,19 @@
+{
+  "scripts": [
+    { "id": "clarity", "file": "clarity.json" },
+    { "id": "generate_json", "file": "generate_json.json" },
+    { "id": "google_ddosguard", "file": "google_ddosguard.json" },
+    { "id": "multi_search_parser", "file": "multi_search_parser.json" },
+    { "id": "parser_alisa", "file": "parser_alisa.json" },
+    { "id": "parser_domen", "file": "parser_domen.json" },
+    { "id": "parser_meta", "file": "parser_meta.json" },
+    { "id": "parser_request", "file": "parser_request.json" },
+    { "id": "parser_unisender_contacts", "file": "parser_unisender_contacts.json" },
+    { "id": "parser_unisender_table", "file": "parser_unisender_table.json" },
+    { "id": "parser_wordstat_api", "file": "parser_wordstat_api.json" },
+    { "id": "screen_serp", "file": "screen_serp.json" },
+    { "id": "serch_links", "file": "serch_links.json" },
+    { "id": "tf_analysis", "file": "tf_analysis.json" },
+    { "id": "images_parser", "file": "images_parser.json" }
+  ]
+}
