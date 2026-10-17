@@ -13,7 +13,7 @@
     { "key": "query", "label": "Поисковый запрос (режим 2, если domains+words не заданы)", "kind": "text", "required": false },
     { "key": "queryFile", "label": "Запрос из файла (режим 2, альтернатива аргументу)", "kind": "file", "path": "query.txt", "required": false },
     { "key": "pagesFile", "label": "Готовый список URL для проверки (режим 1, по одному на строку)", "kind": "file", "path": "pages.txt", "required": false },
-    { "key": "cookies", "label": "Cookies google.com (создаются/обновляются автоматически)", "kind": "file", "path": "scripts/cookies/google.json", "required": false }
+    { "key": "cookies", "label": "Cookies google.com (создаются/обновляются автоматически)", "kind": "file", "path": "scripts/cookies/google.json", "required": false, "cookieKey": "google.com" }
   ],
   "env": [],
   "outputs": [

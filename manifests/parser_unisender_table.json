@@ -7,7 +7,7 @@
   "args": ["unisender_table.js"],
   "install": { "needed": false },
   "inputs": [
-    { "key": "cookies", "label": "Cookies Unisender (JSON)", "kind": "file", "path": "cookiesWordstat.json", "required": false }
+    { "key": "cookies", "label": "Cookies Unisender (JSON)", "kind": "file", "path": "cookiesWordstat.json", "required": false, "cookieKey": "unisender.com" }
   ],
   "env": [],
   "outputs": [

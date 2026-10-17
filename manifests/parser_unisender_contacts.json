@@ -7,7 +7,7 @@
   "args": ["unisender.js"],
   "install": { "needed": false },
   "inputs": [
-    { "key": "cookies", "label": "Cookies Unisender (JSON)", "kind": "file", "path": "cookiesWordstat.json", "required": true },
+    { "key": "cookies", "label": "Cookies Unisender (JSON)", "kind": "file", "path": "cookiesWordstat.json", "required": true, "cookieKey": "unisender.com" },
     { "key": "login", "label": "Логин/пароль для повторного входа", "kind": "file", "path": "login.txt", "required": false }
   ],
   "env": [],

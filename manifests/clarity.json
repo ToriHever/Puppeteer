@@ -8,7 +8,7 @@
   "install": { "needed": false },
   "inputs": [
     { "key": "urls", "label": "URL для анализа (по одному на строку)", "kind": "file", "path": "urls.txt", "required": true },
-    { "key": "cookies", "label": "Cookies clarity.microsoft.com (JSON, экспорт Puppeteer)", "kind": "file", "path": "clarity.microsoft.com.cookies.json", "required": false }
+    { "key": "cookies", "label": "Cookies clarity.microsoft.com (JSON, экспорт Puppeteer)", "kind": "file", "path": "clarity.microsoft.com.cookies.json", "required": false, "cookieKey": "clarity.microsoft.com" }
   ],
   "env": [],
   "outputs": [

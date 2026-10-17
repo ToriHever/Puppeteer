@@ -8,7 +8,7 @@
   "install": { "needed": false },
   "inputs": [
     { "key": "links", "label": "URL для парсинга (по одному на строку)", "kind": "file", "path": "links.txt", "required": true },
-    { "key": "cookies", "label": "Cookies Яндекса (JSON)", "kind": "file", "path": "cookiesWordstat.json", "required": true }
+    { "key": "cookies", "label": "Cookies Яндекса (JSON)", "kind": "file", "path": "cookiesWordstat.json", "required": true, "cookieKey": "yandex.ru" }
   ],
   "env": [],
   "outputs": [

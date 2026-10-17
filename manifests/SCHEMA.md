@@ -24,6 +24,19 @@ then load each file.
       "kind": "file",                   // "file" | "text" | "select" | "flag" | "date"
       "path": "requests.txt",           // relative to cwd, when kind == "file"
       "required": true
+    },
+    {
+      "key": "cookies",
+      "label": "Cookies site.com (JSON)",
+      "kind": "file",
+      "path": "cookies.json",
+      "required": false,
+      "cookieKey": "site.com"           // optional, only on kind=="file" inputs that hold login
+                                         // cookies: a shared key identifying which site's cookies
+                                         // this is. The UI stores one value per cookieKey globally
+                                         // (not per script) and reuses it across every manifest that
+                                         // declares the same cookieKey, instead of asking to re-paste
+                                         // cookies for each script separately.
     }
   ],
   "env": [                              // required process.env keys, and which .env file they come from

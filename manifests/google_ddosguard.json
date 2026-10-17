@@ -9,7 +9,7 @@
   "inputs": [
     { "key": "mode", "label": "Режим: cookies или инкогнито", "kind": "select", "required": true },
     { "key": "period", "label": "Период (1-7 или свой диапазон дат DD.MM.YYYY)", "kind": "select", "required": true },
-    { "key": "cookies", "label": "Cookies google.com (JSON)", "kind": "file", "path": "scripts/cookies/google.json", "required": false }
+    { "key": "cookies", "label": "Cookies google.com (JSON)", "kind": "file", "path": "scripts/cookies/google.json", "required": false, "cookieKey": "google.com" }
   ],
   "env": [],
   "outputs": [
