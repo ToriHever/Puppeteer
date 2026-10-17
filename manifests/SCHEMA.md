@@ -31,12 +31,23 @@ then load each file.
       "kind": "file",
       "path": "cookies.json",
       "required": false,
-      "cookieKey": "site.com"           // optional, only on kind=="file" inputs that hold login
+      "cookieKey": "site.com",          // optional, only on kind=="file" inputs that hold login
                                          // cookies: a shared key identifying which site's cookies
                                          // this is. The UI stores one value per cookieKey globally
                                          // (not per script) and reuses it across every manifest that
                                          // declares the same cookieKey, instead of asking to re-paste
                                          // cookies for each script separately.
+      "stdinAnswer": "2/1"              // optional, for a value the script only ever reads from an
+                                         // interactive stdin prompt (no CLI flag exists). Format
+                                         // mirrors cliFlag's on/off pair: "whenTrue/whenFalse" for
+                                         // kind=="flag", or the literal keystroke(s) for kind=="select".
+                                         // The UI collects it in the launch form like any other input,
+                                         // and the backend types the answer into the process's
+                                         // pseudo-terminal automatically right after spawn — the user
+                                         // never has to type it live. Only safe for the FIRST prompt(s)
+                                         // a script shows; a prompt that depends on an earlier answer
+                                         // (e.g. a submenu only reachable via choice X) still needs the
+                                         // manual "continue" box.
     }
   ],
   "env": [                              // required process.env keys, and which .env file they come from

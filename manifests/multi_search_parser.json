@@ -8,6 +8,7 @@
   "install": { "needed": false },
   "inputs": [
     { "key": "engine", "label": "Поисковик", "kind": "select", "options": ["yandex", "google", "both-seq", "both-par"], "required": true, "cliFlag": "--engine=" },
+    { "key": "cookieMode", "label": "Режим инкогнито (без сохранения cookies)", "kind": "flag", "required": false, "stdinAnswer": "2/1" },
     { "key": "screenshots", "label": "Делать скриншоты выдачи", "kind": "flag", "cliFlag": "--screenshots/--no-screenshots", "required": false },
     { "key": "serpFeatures", "label": "Анализировать расширенные элементы выдачи (ИИ-обзор, картинки, видео, панель знаний)", "kind": "flag", "cliFlag": "--serp-features/--no-serp-features", "required": false },
     { "key": "aiAnswer", "label": "Раскрывать и сохранять текст ИИ-ответа", "kind": "flag", "cliFlag": "--ai-answer/--no-ai-answer", "required": false },
@@ -32,6 +33,6 @@
     "Промежуточные/незавершённые запросы сохраняются в results/<engine>/incomplete_queries*.txt для возобновления после Ctrl+C (при выходе из гита — куки и эти локальные списки теперь в .gitignore, на диске остаются как обычные рабочие файлы).",
     "Детекция ИИ-ответа и SERP-фич для Google — best-effort (разметка обфусцирована, не проверялась вживую из-за частых капч); для Yandex надёжнее (явные data-атрибуты).",
     "sort_screenshots.js/.bat — отдельный вспомогательный скрипт для сортировки уже сделанных скриншотов, не часть основного запуска index.js.",
-    "Режим cookies/инкогнито (utils/helpers.js) читается через readline.question, CLI-аргумента нет — убран из inputs, отвечать через поле продолжения ввода (execution.blocking содержит interactive-menu)."
+    "Режим cookies/инкогнито (utils/helpers.js) читается через readline keypress, CLI-аргумента нет — помечен stdinAnswer, UI отправляет ответ в stdin автоматически сразу после запуска."
   ]
 }
