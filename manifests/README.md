@@ -13,9 +13,8 @@ Backend ServisesVI может просто читать этот каталог 
 
 Эти проблемы всплыли при обзоре кода и мешают тупому запуску "как дочерний процесс":
 
-1. ✅ **Исправлено.** `Parser_request/config.js` — `BASE_PATH` вычисляется через
-   `import.meta.url` (путь к самому файлу), а не захардкожен под конкретного
-   пользователя Windows. Безопасно для переноса на VDS.
+1. ✅ **Неактуально.** `Parser_request` удалён (устарел — своя автоматическая
+   система сбора данных по API).
 2. ✅ **Исправлено.** `serch_links/package.json` — добавлено `"type": "module"`
    (код использует `import`, а package.json раньше не объявлял это).
 3. ✅ **Исправлено.** `Notifications_Telegram.js` — токен и chat_id Telegram
@@ -28,10 +27,10 @@ Backend ServisesVI может просто читать этот каталог 
 4. **`Parser_Meta/run_parser_meta.sh`** ссылается на `domens.txt`, а сам
    `parser_meta.js` читает `urls_meta.txt` — несовпадение имён между обёрткой
    и скриптом.
-5. **Notepad-зависимость** (`Screen_SERP/screen_serp.js`, `Parser_Meta/parser_meta.js`) —
-   оба шеллятся в `notepad.exe` и ждут его закрытия перед стартом. На headless
-   VDS это не сработает: веб-UI должен редактировать входной файл сам, минуя
-   Notepad.
+5. **Notepad-зависимость** (`Parser_Meta/parser_meta.js`) — шеллится в
+   `notepad.exe` и ждёт его закрытия перед стартом. На headless VDS это не
+   сработает: веб-UI должен редактировать входной файл сам, минуя Notepad.
+   (`Screen_SERP` имел ту же проблему — скрипт удалён как устаревший.)
 6. **Ручные шлюзы** (капча/логин) — `google_ddosguard`, `multi_search_parser`,
    `serch_links`, `Parser_Meta` ждут Enter в консоли после ручного решения капчи
    в видимом браузере. Backend должен уметь стримить stdout и принимать "продолжить"

@@ -6,9 +6,7 @@
     { "id": "parser_alisa", "file": "parser_alisa.json" },
     { "id": "parser_domen", "file": "parser_domen.json" },
     { "id": "parser_meta", "file": "parser_meta.json" },
-    { "id": "parser_request", "file": "parser_request.json" },
     { "id": "parser_wordstat_api", "file": "parser_wordstat_api.json" },
-    { "id": "screen_serp", "file": "screen_serp.json" },
     { "id": "serch_links", "file": "serch_links.json" },
     { "id": "tf_analysis", "file": "tf_analysis.json" },
     { "id": "images_parser", "file": "images_parser.json" }
