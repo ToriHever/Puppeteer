@@ -62,7 +62,15 @@ then load each file.
     "blocking": [],                     // known stdin/manual gates the UI must handle, see enum below
     "resumable": false                  // safe to re-run after a crash/kill without losing progress
   },
-  "knownIssues": []                     // bugs/inconsistencies found while writing this manifest - fix before wiring to the UI
+  "knownIssues": [],                    // bugs/inconsistencies found while writing this manifest - fix before wiring to the UI
+  "taskFolders": "input"                // optional, root-level. Set when the script batch-processes every
+                                         // subfolder of this directory (relative to cwd) in one run — there is
+                                         // no CLI way to pick just one. The UI shows a dedicated "Tasks" screen
+                                         // (create/delete task folders, upload an "own page" + competitor HTML
+                                         // files, set an optional query) instead of a form input, since a
+                                         // single-input file picker can't represent "manage N folders of
+                                         // several files each". The run button just processes whatever
+                                         // currently exists under taskFolders.
 }
 ```
 
