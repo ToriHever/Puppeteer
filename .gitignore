@@ -88,3 +88,8 @@ multi_search_parser/scripts/queries.txt
 # Локальные рабочие списки
 Parser_Meta/domens.txt
 multi_search_parser/groups.txt
+
+# tinder: профиль браузера
+tinder/.profile/
+tinder/tinder_result.csv
+tinder/sites.txt
