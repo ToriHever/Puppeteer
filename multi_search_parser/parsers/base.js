@@ -134,6 +134,35 @@ export default class BaseParser {
     }));
   }
 
+  // Возвращает рабочую вкладку после ручного закрытия/падения исходной.
+  // Пользователь мог уже открыть замену и пройти в ней капчу — сначала ищем
+  // такую вкладку в том же браузере и только затем создаём новую.
+  async recoverPage(currentPage, cookies, config, { forceReplace = false } = {}) {
+    if (!this.browser?.isConnected()) {
+      throw new Error('Браузер отключён/закрыт');
+    }
+
+    if (!forceReplace && currentPage && !currentPage.isClosed()) {
+      return currentPage;
+    }
+
+    const openPages = (await this.browser.pages()).filter(
+      candidate => candidate !== currentPage && !candidate.isClosed()
+    );
+    const replacement = [...openPages].reverse().find(candidate => {
+      try {
+        const url = candidate.url();
+        return url && url !== 'about:blank';
+      } catch {
+        return false;
+      }
+    }) || openPages[openPages.length - 1] || await this.browser.newPage();
+
+    await configureBrowser(replacement, this.mode === MODES.COOKIE ? cookies : [], config);
+    console.log(`[${this.name}] ✓ Подключена живая вкладка браузера`);
+    return replacement;
+  }
+
   // Сохранение промежуточных результатов
   async saveIntermediateResults() {
     try {
@@ -239,6 +268,10 @@ export default class BaseParser {
             
             // Ждем действия пользователя
             await waitForUserInput('После прохождения капчи');
+
+            // Если пользователь закрыл исходную вкладку и прошёл капчу в новой,
+            // переключаемся на неё ДО сохранения cookies и повторного запроса.
+            page = await this.recoverPage(page, cookies, config);
             
             // Сохраняем обновленные куки ТОЛЬКО в режиме с куками
             if (this.mode === MODES.COOKIE) {
@@ -321,27 +354,28 @@ export default class BaseParser {
 
         } catch (error) {
           console.error(`[${this.name}] ❌ Ошибка при обработке запроса "${query}":`, error.message);
-          this.incompleteQueries.push(query);
+          if (!this.incompleteQueries.includes(query)) {
+            this.incompleteQueries.push(query);
+          }
 
-          // Страница умерла (закрылась/упала) — переиспользовать её дальше
-          // бессмысленно, все следующие запросы будут падать с той же
-          // ошибкой. Пробуем открыть новую вкладку и продолжить со
-          // следующего запроса; если браузер тоже недоступен — прекращаем.
+          // После закрытия/падения вкладки подключаем открытую пользователем
+          // замену (или создаём новую) и повторяем ТЕКУЩИЙ запрос.
           if (isFatalPageError(error) || page.isClosed()) {
-            console.warn(`[${this.name}] ⚠️ Вкладка браузера недоступна (закрыта/упала). Пробую открыть новую...`);
+            console.warn(`[${this.name}] ⚠️ Вкладка браузера недоступна. Пробую восстановить её и повторить запрос...`);
             try {
-              if (!this.browser.isConnected()) {
-                throw new Error('Браузер отключён/закрыт');
+              page = await this.recoverPage(page, cookies, config, { forceReplace: true });
+              if (this.mode === MODES.COOKIE) {
+                await saveCookies(page, paths.cookies);
               }
-              page = await this.browser.newPage();
-              await configureBrowser(page, this.mode === MODES.COOKIE ? cookies : [], config);
-              console.log(`[${this.name}] ✓ Новая вкладка открыта, продолжаю со следующего запроса`);
+              i--;
             } catch (recoveryError) {
               const remaining = queries.length - i - 1;
               console.error(`[${this.name}] ❌ Не удалось восстановить браузер: ${recoveryError.message}`);
               console.log(`[${this.name}] ⏹ Останавливаю обработку — браузер недоступен. Оставшихся запросов: ${remaining}`);
               for (let j = i + 1; j < queries.length; j++) {
-                this.incompleteQueries.push(queries[j]);
+                if (!this.incompleteQueries.includes(queries[j])) {
+                  this.incompleteQueries.push(queries[j]);
+                }
               }
               break;
             }
