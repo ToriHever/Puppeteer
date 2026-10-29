@@ -28,11 +28,25 @@ class GoogleParser extends BaseParser {
   async searchQuery(page, query) {
     const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=ru`;
 
-    // Переходим на страницу поиска
-    await page.goto(searchUrl, {
-      waitUntil: 'networkidle2',
-      timeout: 30000
-    });
+    // networkidle2 ненадёжен для Google: фоновые соединения могут не
+    // затихать минутами даже тогда, когда выдача уже полностью видна.
+    // Ждём DOM, а результаты отдельно дожидаемся по селекторам ниже.
+    try {
+      await page.goto(searchUrl, {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000
+      });
+    } catch (error) {
+      if (!/Navigation timeout/i.test(error.message)) throw error;
+
+      // Если документ всё же отрисовался, медленные фоновые запросы не
+      // должны обнулять результаты. Продолжаем с уже видимой страницей.
+      const hasVisibleDocument = await page.evaluate(() => Boolean(
+        document.body && document.body.innerText.trim().length > 0
+      )).catch(() => false);
+      if (!hasVisibleDocument) throw error;
+      console.warn(`  [${this.name}] ⚠️ Фоновые запросы не завершились вовремя, используем уже загруженную страницу`);
+    }
 
     // Делаем несколько случайных движений мыши по странице
     const viewport = page.viewport();
